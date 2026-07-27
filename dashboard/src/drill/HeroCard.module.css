@@ -1,0 +1,57 @@
+/* Readout strip under the render stage: equal mono cells, each able to collapse
+   to a muted N/A plus its reason without changing the strip's height. */
+.strip {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: var(--space-md);
+  margin-top: var(--space-md);
+  padding-top: var(--space-md);
+  border-top: 1px solid var(--color-border);
+}
+
+.cell {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.cellLbl {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-fg-3);
+}
+
+.val {
+  font-family: var(--font-mono);
+  font-size: 18px;
+  color: var(--color-fg);
+  font-variant-numeric: tabular-nums;
+}
+
+.na {
+  font-family: var(--font-mono);
+  font-size: 18px;
+  color: var(--color-fg-4);
+}
+
+.reason {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  line-height: 1.4;
+  letter-spacing: 0.04em;
+  color: var(--color-fg-4);
+}
+
+.halted {
+  margin: var(--space-md) 0 0;
+  padding: var(--space-sm) var(--space-md);
+  background: var(--color-surface-2);
+  border-left: 2px solid var(--color-fault);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  color: var(--color-fault);
+}

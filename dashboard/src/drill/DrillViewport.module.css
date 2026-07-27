@@ -1,0 +1,40 @@
+/* Render stage: the scene fills it, chrome floats above. Height is set by the
+   host (hero card slab or teleop window column). */
+.viewport {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  background: var(--color-bg-elev-1);
+  overflow: hidden;
+}
+.viewport[data-variant='hero'] { height: 440px; }
+.viewport :global(canvas) { display: block; }
+
+.tag {
+  position: absolute; top: 8px; left: 10px;
+  font-family: var(--font-mono); font-size: 9px; letter-spacing: 0.1em;
+  text-transform: uppercase; color: var(--color-fg-4); pointer-events: none;
+}
+
+.modeRow { position: absolute; top: 8px; right: 10px; display: flex; gap: 2px; }
+.vpBtn {
+  background: var(--color-bg-overlay); border: 1px solid var(--color-border);
+  color: var(--color-fg-3); font-family: var(--font-mono); font-size: 9px;
+  letter-spacing: 0.1em; text-transform: uppercase; padding: 3px 8px; cursor: pointer;
+  transition: color var(--motion-fast), border-color var(--motion-fast);
+}
+.vpBtn:hover:not(:disabled) { color: var(--color-fg-2); }
+.vpBtn[aria-pressed='true'] { color: var(--color-fg); border-color: var(--color-fg-4); }
+.vpBtn:disabled { color: var(--color-fg-4); opacity: 0.5; cursor: default; }
+
+/* Honesty hints stack bottom-left, muted so they never read as telemetry. */
+.hints {
+  position: absolute; left: 10px; bottom: 8px;
+  display: flex; flex-direction: column; gap: 2px;
+  pointer-events: none;
+}
+.hint {
+  font-family: var(--font-mono); font-size: 9px; letter-spacing: 0.06em;
+  color: var(--color-fg-4);
+}

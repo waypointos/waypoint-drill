@@ -1,0 +1,215 @@
+/* Teleop window: viewport left, control rail right, status footer beneath.
+   Sized for the host frame's 620x460 default and still legible at its
+   320x260 minimum, where the rail keeps a floor and the stage gives up width. */
+
+.window {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  background: var(--color-bg);
+  color: var(--color-fg-2);
+  font-family: var(--font-mono);
+}
+
+.main {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+}
+
+.stage {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+}
+
+.rail {
+  flex: 0 1 236px;
+  min-width: 172px;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  padding: var(--space-sm) var(--space-md);
+  border-left: 1px solid var(--color-border);
+  background: var(--color-chrome);
+  overflow-y: auto;
+}
+
+/* Readout strip */
+
+.strip {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+}
+
+.row {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.rowHead {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-sm);
+}
+
+.rowLabel {
+  font-size: 9px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--color-fg-4);
+}
+
+.value {
+  font-size: 13px;
+  letter-spacing: 0.02em;
+  color: var(--color-fg);
+}
+
+.na {
+  font-size: 13px;
+  letter-spacing: 0.02em;
+  color: var(--color-fg-4);
+}
+
+.hint {
+  font-size: 9px;
+  line-height: 1.4;
+  letter-spacing: 0.05em;
+  color: var(--color-fg-4);
+}
+
+.sub {
+  font-size: 10px;
+  letter-spacing: 0.05em;
+  color: var(--color-fg-3);
+}
+
+.sub .value {
+  font-size: 10px;
+  color: var(--color-fg-2);
+}
+
+.sub .na {
+  font-size: 10px;
+}
+
+/* Halt banner and the stop control */
+
+.halted {
+  margin: 0;
+  padding: var(--space-xs) var(--space-sm);
+  border: 1px solid var(--color-fault);
+  background: var(--color-surface);
+  color: var(--color-fault);
+  font-size: 10px;
+  line-height: 1.4;
+  letter-spacing: 0.06em;
+}
+
+.stop {
+  flex: none;
+  padding: var(--space-sm) var(--space-md);
+  background: var(--color-surface-2);
+  border: 1px solid var(--color-fault);
+  color: var(--color-fault);
+  font-family: var(--font-mono);
+  font-size: 15px;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: background var(--motion), color var(--motion);
+}
+
+.stop:hover {
+  background: var(--color-fault);
+  color: var(--color-bg);
+}
+
+/* Hold controls: two columns so the window works without a gamepad. */
+
+.holds {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-xs);
+}
+
+/* D-pad legend */
+
+.legend {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  border-top: 1px solid var(--color-border-soft);
+  padding-top: var(--space-sm);
+}
+
+.legendTitle {
+  font-size: 9px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--color-fg-4);
+}
+
+.legendRow {
+  margin: 0;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-sm);
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  color: var(--color-fg-3);
+}
+
+.legendKey {
+  color: var(--color-fg-2);
+  min-width: 4ch;
+}
+
+.legendAction {
+  color: var(--color-fg-4);
+}
+
+/* Footer */
+
+.foot {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: var(--space-lg);
+  border-top: 1px solid var(--color-border);
+  padding: 5px var(--space-md);
+  font-size: 9.5px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--color-fg-3);
+}
+
+.footSpacer { flex: 1; }
+
+.refusal { color: var(--color-caution); }
+
+.feed {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.feedDot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.feedLive { color: var(--color-ok); }
+.feedStale { color: var(--color-caution); }
+.feedOff { color: var(--color-fg-4); }

@@ -1,0 +1,101 @@
+/* Travel bar over the axis controls. Rows wrap so the card survives the narrow
+   single-column layout without clipping a control. */
+.bar { display: flex; flex-direction: column; gap: var(--space-xs); }
+
+.track {
+  position: relative;
+  height: 10px;
+  background: var(--color-surface-2);
+  border: 1px solid var(--color-border);
+  overflow: hidden;
+}
+
+.fill {
+  height: 100%;
+  background: var(--color-accent-tint);
+  border-right: 2px solid var(--color-accent);
+  transition: width var(--motion);
+}
+
+.scale {
+  display: flex;
+  justify-content: space-between;
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--color-fg-4);
+}
+
+.row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: var(--space-md);
+  margin-top: var(--space-md);
+}
+
+.gated { display: flex; flex-direction: column; gap: var(--space-xs); min-width: 0; }
+
+.btn {
+  padding: var(--space-sm) var(--space-md);
+  background: var(--color-surface-2);
+  color: var(--color-fg-2);
+  border: 1px solid var(--color-border);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+  transition: background var(--motion), color var(--motion), border-color var(--motion);
+}
+
+.btn:hover:not(:disabled) { background: var(--color-raise); color: var(--color-fg); }
+
+.btn:disabled {
+  background: var(--color-surface);
+  color: var(--color-fg-4);
+  border-color: var(--color-border-soft);
+  cursor: default;
+}
+
+.slider {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-sm);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--color-fg-3);
+  min-width: 0;
+}
+
+.slider input { accent-color: var(--color-accent); width: 160px; max-width: 40vw; }
+
+.sliderLbl {
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-fg-3);
+}
+
+.sliderVal { color: var(--color-fg-2); font-variant-numeric: tabular-nums; }
+
+.na { color: var(--color-fg-4); }
+
+.reason {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  line-height: 1.4;
+  letter-spacing: 0.04em;
+  color: var(--color-fg-4);
+}
+
+.calNote {
+  margin: var(--space-md) 0 0;
+  padding-top: var(--space-sm);
+  border-top: 1px solid var(--color-border-soft);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  color: var(--color-fg-3);
+}

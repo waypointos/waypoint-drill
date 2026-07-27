@@ -1,0 +1,49 @@
+/* Hold-to-move control. Sits in the HEIGHT and AUGER cards and in the teleop
+   window, so the button carries its own reason line rather than a card slot. */
+.wrap {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+  min-width: 0;
+}
+
+.btn {
+  padding: var(--space-sm) var(--space-md);
+  background: var(--color-surface-2);
+  color: var(--color-fg-2);
+  border: 1px solid var(--color-border);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+  /* A held pointer must not be stolen by scroll or text selection. */
+  touch-action: none;
+  user-select: none;
+  transition: background var(--motion), color var(--motion), border-color var(--motion);
+}
+
+.btn:hover:not(:disabled) {
+  background: var(--color-raise);
+  color: var(--color-fg);
+}
+
+.btn[aria-pressed='true']:not(:disabled) {
+  background: var(--color-accent-tint);
+  border-color: var(--color-accent);
+  color: var(--color-fg);
+}
+
+.btn:disabled {
+  background: var(--color-surface);
+  color: var(--color-fg-4);
+  border-color: var(--color-border-soft);
+  cursor: default;
+}
+
+.reason {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  line-height: 1.4;
+  letter-spacing: 0.04em;
+  color: var(--color-fg-4);
+}

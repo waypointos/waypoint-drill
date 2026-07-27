@@ -1,0 +1,75 @@
+/* Direction chip over the two hold controls, load readout below. */
+.head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  flex-wrap: wrap;
+}
+
+.row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: var(--space-md);
+  margin-top: var(--space-md);
+}
+
+.readout {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-sm);
+  flex-wrap: wrap;
+  margin-top: var(--space-md);
+  padding-top: var(--space-sm);
+  border-top: 1px solid var(--color-border-soft);
+}
+
+.lbl {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-fg-3);
+}
+
+.chip {
+  padding: 2px var(--space-sm);
+  background: var(--color-surface-2);
+  border: 1px solid var(--color-border);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  color: var(--color-fg-2);
+}
+
+.chip[data-drill-dir='drill'],
+.chip[data-drill-dir='switch'] {
+  background: var(--color-accent-tint);
+  border-color: var(--color-accent);
+  color: var(--color-fg);
+}
+
+.chipNa {
+  padding: 2px var(--space-sm);
+  border: 1px solid var(--color-border-soft);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--color-fg-4);
+}
+
+.val {
+  font-family: var(--font-mono);
+  font-size: 14px;
+  color: var(--color-fg);
+  font-variant-numeric: tabular-nums;
+}
+
+.na { font-family: var(--font-mono); font-size: 14px; color: var(--color-fg-4); }
+
+.reason {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  line-height: 1.4;
+  letter-spacing: 0.04em;
+  color: var(--color-fg-4);
+}
