@@ -16,3 +16,25 @@ updates:
     groups:
       actions:
         patterns: ["*"]
+  - package-ecosystem: "gomod"
+    directory: "/"
+    schedule:
+      interval: "monthly"
+    cooldown:
+      default-days: 14
+    commit-message:
+      prefix: "build"
+    groups:
+      go-deps:
+        patterns: ["*"]
+  - package-ecosystem: "npm"
+    directory: "/dashboard"
+    schedule:
+      interval: "monthly"
+    cooldown:
+      default-days: 14
+    commit-message:
+      prefix: "build"
+    groups:
+      npm-deps:
+        patterns: ["*"]
