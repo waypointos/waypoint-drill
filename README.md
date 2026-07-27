@@ -56,10 +56,8 @@ Everything lives in the module sandbox
 ## Build and test
 
 The Go build depends on the Waypoint SDK and protocol bindings via local
-`replace` directives pointing at a sibling `../waypoint` checkout. That repo
-is not public yet, so `go build` fails without access to it; CI uses a
-read-only deploy key for the same clone. The dashboard has no such
-dependency and builds from a plain clone (see below).
+`replace` directives pointing at a sibling `../waypoint` checkout. The dashboard
+has no such dependency and builds from a plain clone (see below).
 
 With `../waypoint` checked out:
 
