@@ -1,0 +1,13 @@
+Waypoint Drill Module
+Copyright 2026 Batu Ergun
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use the files in this project except in compliance with the
+License. You may obtain a copy of the License in the LICENSE file or at:
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+--------------------------------------------------------------------------------
+
+dashboard/src/ui/ contains design tokens and the Panel primitive copied from
+the Waypoint project (Copyright 2026 Batu Ergun, Apache-2.0).

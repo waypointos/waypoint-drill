@@ -55,13 +55,18 @@ Everything lives in the module sandbox
 
 ## Build and test
 
+The Go build depends on the Waypoint SDK and protocol bindings via local
+`replace` directives pointing at a sibling `../waypoint` checkout. That repo
+is not public yet, so `go build` fails without access to it; CI uses a
+read-only deploy key for the same clone. The dashboard has no such
+dependency and builds from a plain clone (see below).
+
+With `../waypoint` checked out:
+
 ```
 go build ./...
 go test ./...
 ```
-
-The repo uses local `replace` directives pointing at a sibling `../waypoint`
-checkout for the SDK and protocol bindings.
 
 ## Manual dev loop against a dev rover
 
@@ -113,3 +118,12 @@ That cadence survives two dropped frames. When the daemon reports a halt the
 UI cancels the running hold and refuses to publish again until the operator
 lifts the pointer and presses anew, matching the fresh-input rule the gamepad
 path gets from the daemon.
+
+## Releases
+
+Tagged releases ship a signed `.raw` module image; see [SECURITY.md](SECURITY.md)
+for the cosign verification command and for how to report a vulnerability.
+
+## License
+
+Apache-2.0, see [LICENSE](LICENSE) and [NOTICE](NOTICE).
