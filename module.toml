@@ -1,0 +1,42 @@
+name        = "drill"
+label       = "Drill"
+version     = "0.1.0"
+api_version = "1"
+language    = "go"
+entrypoint  = "waypoint-module-drill"
+requires    = ["servo-control", "teleop-input"]
+
+[component]
+class = "drill"
+state_rate_hz = 20
+
+# drill.state / drill.cmd come from the generic class auto-grant; the servo
+# leaves are the agent's servo-control broker bridge.
+[permissions]
+publish = [
+  "waypoint.*.module.drill.servo.cmd",
+  "waypoint.*.module.drill.servo.read",
+  "waypoint.*.module.drill.stats",
+  "waypoint.*.module.drill.calibration",
+]
+subscribe = [
+  "waypoint.*.module.drill.health.ready",
+]
+
+[hardware]
+read_write = ["/var/lib/waypoint-module-drill"]
+
+[health]
+probe      = "ready"
+interval_s = 5
+timeout_s  = 2
+
+[ui.static]
+tab_id = "m-drill"
+bundle = "/dashboard/panel.js"
+
+[ui.teleop]
+window_id = "w-drill"
+label     = "Drill"
+entry     = "teleop.js"
+bindings  = ["dpad"]

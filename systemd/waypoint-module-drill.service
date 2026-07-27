@@ -1,0 +1,21 @@
+[Unit]
+Description=Waypoint module - drill (lift + auger control)
+After=waypoint-agent.service
+Requires=waypoint-agent.service
+
+[Service]
+Type=notify
+Environment=WAYPOINT_ROVER_ID=
+EnvironmentFile=-/etc/waypoint/core.env
+EnvironmentFile=-/data/waypoint/core.env
+ExecStart=/usr/bin/waypoint-module-drill \
+  --config /run/waypoint/modules/drill/config.toml \
+  --creds  /run/waypoint/modules/drill/creds.env \
+  --rover  ${WAYPOINT_ROVER_ID}
+Restart=always
+RestartSec=2s
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

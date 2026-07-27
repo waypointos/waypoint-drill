@@ -1,0 +1,89 @@
+syntax = "proto3";
+
+package waypoint.module.drill.v1;
+
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/waypointos/waypoint-drill/protocol/gen/go;drillv1";
+
+enum AugerDirection {
+  AUGER_DIRECTION_UNSPECIFIED = 0;
+  AUGER_DIRECTION_IDLE        = 1;
+  AUGER_DIRECTION_DRILL       = 2;  // conveys sample up the screw
+  AUGER_DIRECTION_SWITCH      = 3;  // ratchet-engaged core rotation
+}
+
+// ---- backend -> tab: drill.state at the component rate ----
+message DrillState {
+  google.protobuf.Timestamp t = 1;
+
+  // Lift axis. Height is a software axis over multiple servo revolutions:
+  // ticks need a home anchor, norm/mm need a calibrated travel span.
+  bool homed      = 2;
+  bool calibrated = 3;
+  optional int64  height_ticks = 4;  // unwrapped ticks below the top anchor; absent until homed
+  optional double height_norm  = 5;  // 0 = top .. 1 = bottom; absent until calibrated
+  optional double height_mm    = 6;  // absent unless mm_per_tick configured
+  string height_na_reason      = 7;  // "unhomed" | "uncalibrated" | ""; explains the most-derived absent field
+  optional sint32 lift_velocity_raw = 8;  // last read PRESENT_SPEED, signed ticks/s
+
+  // Auger.
+  AugerDirection auger_direction    = 9;
+  optional sint32 auger_velocity_raw = 10;
+  bool   switch_allowed        = 11;
+  string switch_refused_reason = 12;  // "" when allowed; "uncalibrated" | "below top band" | "halted"
+
+  // Safety and activity.
+  bool   halted       = 13;
+  string halt_reason  = 14;  // "" | "stop command" | "input stale" | "read gap" | "overcurrent"
+  string phase        = 15;  // "idle" | "jog" | "goto" | "homing" | "calibrating"
+  string last_refusal = 16;  // most recent refused command with reason, "" when none
+
+  // Raw per-servo telemetry (lift = bus 11, auger = bus 12).
+  ServoState lift  = 17;
+  ServoState auger = 18;
+}
+
+// ---- tab/teleop -> backend on drill.cmd ----
+message DrillCommand {
+  oneof action {
+    JogLift    jog_lift    = 1;  // hold-to-move; velocity_norm 0 stops the lift
+    GotoHeight goto_height = 2;  // requires calibrated
+    RunAuger   run_auger   = 3;  // hold-to-move; throttle 0 stops the auger
+    bool       stop        = 4;  // halt latch: zero-write both, torque off, refuse motion until fresh input
+    bool       home        = 5;  // creep up to stall, anchor top
+    Calibrate  calibrate   = 6;
+  }
+}
+message JogLift    { double velocity_norm = 1; }  // -1..1, + is up
+message GotoHeight { double norm = 1; }           // 0..1
+message RunAuger   { double throttle = 1; }       // -1..1, + drill, - switch (interlock applies)
+message Calibrate  { bool run = 1; }              // true starts the travel run, false aborts
+
+// ---- wire-compatible mirror of waypoint.v1.ServoState (agent relays raw bytes) ----
+message ServoState {
+  uint32 servo_id = 1;
+  optional uint32 position_raw  = 2;
+  optional sint32 speed_raw     = 3;
+  optional sint32 load_raw      = 4;
+  optional uint32 current_raw   = 5;
+  optional uint32 voltage_deci  = 6;
+  optional uint32 temperature_c = 7;
+  bool moving              = 8;
+  bool overcurrent_tripped = 9;
+  bool ok                  = 10;
+}
+
+// ---- backend -> tab: stats at 5 Hz, raw register pairs for the MOTORS card ----
+message DrillStats {
+  google.protobuf.Timestamp t = 1;
+  repeated ServoState servos  = 2;  // order: lift, auger
+}
+
+// ---- backend -> tab: home/calibrate progress on the calibration leaf ----
+message CalibrationEvent {
+  google.protobuf.Timestamp t = 1;
+  string phase = 2;  // "idle" | "homing" | "run_down" | "run_up" | "done" | "aborted" | "failed"
+  optional int64 travel_ticks = 3;  // present on "done"
+  string detail = 4;                // failure/abort reason, "" otherwise
+}
