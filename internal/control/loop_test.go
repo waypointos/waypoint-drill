@@ -520,7 +520,7 @@ func TestAugerDrillRunsWithoutCalibration(t *testing.T) {
 
 	f.loop.tick(t0)
 
-	assert.Equal(t, int32(800), f.bus.velocity(12))
+	assert.Equal(t, f.loop.cfg.DrillSpeed, f.bus.velocity(12))
 	assert.Equal(t, dirDrill, f.loop.Snapshot().AugerDir)
 }
 
@@ -602,7 +602,7 @@ func TestAugerReleaseWritesZero(t *testing.T) {
 	f := newFixture(t)
 	f.loop.Command(augerCmd(1), t0)
 	f.loop.tick(t0)
-	require.Equal(t, int32(800), f.bus.velocity(12))
+	require.Equal(t, f.loop.cfg.DrillSpeed, f.bus.velocity(12))
 	f.bus.reset()
 
 	at := t0.Add(20 * time.Millisecond)

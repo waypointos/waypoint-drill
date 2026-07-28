@@ -52,7 +52,9 @@ func Load(path string) (*Config, error) {
 		SwitchDirection:     "ccw",
 		JogSpeed:            400,
 		SlowJogSpeed:        150,
-		DrillSpeed:          800,
+		// Ceiling the tab's speed slider scales, not a fixed rate. 3200 raw is
+		// roughly the STS3215's own free-run limit at 4096 ticks per revolution.
+		DrillSpeed:          3200,
 		SwitchSpeed:         300,
 		TopBandFraction:     0.03,
 		LiftOvercurrentRaw:  500,

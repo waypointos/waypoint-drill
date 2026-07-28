@@ -140,6 +140,35 @@
   gap: var(--space-xs);
 }
 
+/* Auger speed, under the holds it scales. */
+
+.speed {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  margin-top: var(--space-sm);
+  min-width: 0;
+}
+
+.speed input { accent-color: var(--color-accent); flex: 1; min-width: 0; }
+
+.speedLbl {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--color-fg-4);
+}
+
+.speedVal {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--color-fg-2);
+  font-variant-numeric: tabular-nums;
+  min-width: 4ch;
+  text-align: right;
+}
+
 /* D-pad legend */
 
 .legend {

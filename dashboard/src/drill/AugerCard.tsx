@@ -1,6 +1,12 @@
-// AUGER card: the two hold-to-move directions plus the load the servo reports
-// while turning. Switch is the gated one; the daemon refuses it unless the core
-// is calibrated and parked in the top band, and its reason is shown verbatim.
+// AUGER card: speed, the two hold-to-move directions, and the load the servo
+// reports while turning. Switch is the gated one; the daemon refuses it unless
+// the core is calibrated and parked in the top band, and its reason is shown
+// verbatim.
+//
+// Speed is a fraction of the configured per-direction ceiling (drill_speed,
+// switch_speed), so switch stays gentle at 100% while drill does not. A hold
+// re-publishes every 50 ms, so dragging the slider mid-hold takes effect.
+import { useState } from 'react';
 import { AugerDirection, type DrillState } from '../proto/drill_pb';
 import { runAugerCmd } from '../commands';
 import { AWAITING } from '../useDrillTelemetry';
@@ -15,7 +21,12 @@ const DIR_LABEL: Record<AugerDirection, string> = {
   [AugerDirection.SWITCH]: 'switch',
 };
 
+/** Opening speed, low enough to be a safe default on an unfamiliar hole. */
+const DEFAULT_SPEED_PCT = 60;
+
 export function AugerCard({ state, halted }: { state: DrillState | null; halted: boolean }) {
+  const [speedPct, setSpeedPct] = useState(DEFAULT_SPEED_PCT);
+  const throttle = speedPct / 100;
   const dir = state ? DIR_LABEL[state.augerDirection] : '';
   const switchAllowed = state?.switchAllowed ?? false;
   const switchReason = state
@@ -27,45 +38,67 @@ export function AugerCard({ state, halted }: { state: DrillState | null; halted:
 
   return (
     <Panel title="AUGER" note="hold to turn">
-      <div className={styles.head}>
+      <div className={styles.grid}>
         <span className={styles.lbl}>direction</span>
-        {dir ? (
-          <span className={styles.chip} data-drill-dir={dir}>{dir}</span>
-        ) : (
-          <span className={styles.chipNa} data-testid="auger-dir-na">N/A</span>
-        )}
-        {dir ? null : <span className={styles.reason}>{dirReason}</span>}
-      </div>
+        <div className={styles.controls}>
+          {dir ? (
+            <span className={styles.chip} data-drill-dir={dir}>{dir}</span>
+          ) : (
+            <>
+              <span className={styles.chipNa} data-testid="auger-dir-na">N/A</span>
+              <span className={styles.reason}>{dirReason}</span>
+            </>
+          )}
+        </div>
 
-      <div className={styles.row}>
-        <HoldButton
-          label="drill"
-          makeCmd={() => runAugerCmd(1)}
-          makeZero={() => runAugerCmd(0)}
-          halted={halted}
-          testId="auger-drill"
-        />
-        <HoldButton
-          label="switch"
-          makeCmd={() => runAugerCmd(-1)}
-          makeZero={() => runAugerCmd(0)}
-          halted={halted}
-          disabled={!switchAllowed}
-          reason={switchReason}
-          testId="auger-switch"
-        />
-      </div>
+        <span className={styles.lbl}>speed</span>
+        <div className={styles.controls}>
+          <label className={styles.slider}>
+            <input
+              type="range"
+              min={5}
+              max={100}
+              step={5}
+              value={speedPct}
+              onChange={(e) => setSpeedPct(Number(e.target.value))}
+              aria-label="auger speed"
+              data-testid="auger-speed"
+            />
+            <span className={styles.sliderVal}>{speedPct} %</span>
+          </label>
+        </div>
 
-      <div className={styles.readout}>
+        <span className={styles.lbl}>run</span>
+        <div className={styles.controls}>
+          <HoldButton
+            label="drill"
+            makeCmd={() => runAugerCmd(throttle)}
+            makeZero={() => runAugerCmd(0)}
+            halted={halted}
+            testId="auger-drill"
+          />
+          <HoldButton
+            label="switch"
+            makeCmd={() => runAugerCmd(-throttle)}
+            makeZero={() => runAugerCmd(0)}
+            halted={halted}
+            disabled={!switchAllowed}
+            reason={switchReason}
+            testId="auger-switch"
+          />
+        </div>
+
         <span className={styles.lbl}>load</span>
-        {load == null ? (
-          <>
-            <span className={styles.na} data-testid="auger-load-na">N/A</span>
-            <span className={styles.reason}>{loadReason}</span>
-          </>
-        ) : (
-          <span className={styles.val} data-testid="auger-load">{load} raw</span>
-        )}
+        <div className={styles.controls}>
+          {load == null ? (
+            <>
+              <span className={styles.na} data-testid="auger-load-na">N/A</span>
+              <span className={styles.reason}>{loadReason}</span>
+            </>
+          ) : (
+            <span className={styles.val} data-testid="auger-load">{load} raw</span>
+          )}
+        </div>
       </div>
     </Panel>
   );

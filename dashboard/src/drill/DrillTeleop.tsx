@@ -14,6 +14,9 @@ import styles from './DrillTeleop.module.css';
 
 const STALE_AFTER_MS = 2_000;
 
+/** Opening auger speed, as a fraction of the configured per-direction ceiling. */
+const DEFAULT_SPEED_PCT = 60;
+
 // W3C standard gamepad D-pad indices, the same map the daemon reads
 // (internal/teleop/input.go). The legend exists so an operator on a pad can
 // see which physical button drives which axis without leaving the window.
@@ -85,6 +88,11 @@ export function DrillTeleop() {
   // The daemon's halt latch is only visible one drill.state frame later, and any
   // nonzero command in that window clears it again. A stop therefore disarms the
   // on-screen holds locally until a frame confirms the halt.
+  // Scales only the on-screen holds. The gamepad D-pad is an independent source
+  // and stays at full throttle, since a pad operator cannot see this control.
+  const [speedPct, setSpeedPct] = useState(DEFAULT_SPEED_PCT);
+  const throttle = speedPct / 100;
+
   const [stopped, setStopped] = useState(false);
   const stop = useCallback(() => {
     setStopped(true);
@@ -159,14 +167,14 @@ export function DrillTeleop() {
             />
             <HoldButton
               label="drill"
-              makeCmd={() => runAugerCmd(1)}
+              makeCmd={() => runAugerCmd(throttle)}
               makeZero={() => runAugerCmd(0)}
               halted={holdsHalted}
               testId="teleop-hold-drill"
             />
             <HoldButton
               label="switch"
-              makeCmd={() => runAugerCmd(-1)}
+              makeCmd={() => runAugerCmd(-throttle)}
               makeZero={() => runAugerCmd(0)}
               halted={holdsHalted}
               disabled={!switchAllowed}
@@ -174,6 +182,21 @@ export function DrillTeleop() {
               testId="teleop-hold-switch"
             />
           </div>
+
+          <label className={styles.speed}>
+            <span className={styles.speedLbl}>auger speed</span>
+            <input
+              type="range"
+              min={5}
+              max={100}
+              step={5}
+              value={speedPct}
+              onChange={(e) => setSpeedPct(Number(e.target.value))}
+              aria-label="auger speed"
+              data-testid="teleop-auger-speed"
+            />
+            <span className={styles.speedVal}>{speedPct} %</span>
+          </label>
 
           <dl className={styles.legend} data-testid="teleop-dpad-legend">
             <dt className={styles.legendTitle}>d-pad</dt>

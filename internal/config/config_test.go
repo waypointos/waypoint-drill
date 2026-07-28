@@ -28,7 +28,7 @@ func TestLoad_MissingFileReturnsDefaults(t *testing.T) {
 		SwitchDirection:     "ccw",
 		JogSpeed:            400,
 		SlowJogSpeed:        150,
-		DrillSpeed:          800,
+		DrillSpeed:          3200,
 		SwitchSpeed:         300,
 		TopBandFraction:     0.03,
 		LiftOvercurrentRaw:  500,

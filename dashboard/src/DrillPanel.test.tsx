@@ -104,6 +104,40 @@ describe('DrillPanel', () => {
     expect(screen.getAllByText('below top band').length).toBe(2);
   });
 
+  it('scales the auger throttle by the speed slider instead of pinning it to full', () => {
+    const { publish } = setup();
+
+    fireEvent.change(screen.getByTestId('auger-speed'), { target: { value: '25' } });
+    fireEvent.pointerDown(screen.getByTestId('auger-drill'));
+
+    const run = cmds(publish).filter((c) => c.action.case === 'runAuger');
+    expect(run).toHaveLength(1);
+    expect(run[0].action.value as { throttle: number }).toMatchObject({ throttle: 0.25 });
+  });
+
+  it('sends the switch hold at the negated slider value, not full reverse', () => {
+    const { publish, send } = setup();
+    send('drill.state', new DrillState({ switchAllowed: true }).toBinary());
+
+    fireEvent.change(screen.getByTestId('auger-speed'), { target: { value: '40' } });
+    fireEvent.pointerDown(screen.getByTestId('auger-switch'));
+
+    const run = cmds(publish).filter((c) => c.action.case === 'runAuger');
+    expect(run).toHaveLength(1);
+    expect((run[0].action.value as { throttle: number }).throttle).toBeCloseTo(-0.4, 6);
+  });
+
+  it('releases the auger hold with a zero throttle whatever the slider reads', () => {
+    const { publish } = setup();
+
+    fireEvent.change(screen.getByTestId('auger-speed'), { target: { value: '80' } });
+    fireEvent.pointerDown(screen.getByTestId('auger-drill'));
+    fireEvent.pointerUp(screen.getByTestId('auger-drill'));
+
+    const run = cmds(publish).filter((c) => c.action.case === 'runAuger');
+    expect((run[run.length - 1].action.value as { throttle: number }).throttle).toBe(0);
+  });
+
   it('publishes a decodable set_top command on the module cmd subject', () => {
     const { publish } = setup();
     fireEvent.click(screen.getByTestId('set-top'));
