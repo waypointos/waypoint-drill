@@ -5,19 +5,21 @@
 import { useEffect, useRef } from 'react';
 import { AugerDirection } from '../proto/drill_pb';
 import type { DrillPose } from './DrillScene';
+import { binSpans } from './parts/hopper';
 import {
   BARREL,
-  BARREL_RING_H,
-  BARREL_SLOTS,
-  CONTAINER,
-  CONTAINERS,
+  BASE_PLATE,
+  BASE_PLATE_RIM,
   CORE,
+  CORE_CAP,
   CORE_MOUTH_TOP_Y,
+  HOPPER,
   MOTOR,
-  PLATE,
-  PLATE_THICKNESS,
-  PLATE_TOP_Y,
+  PINION,
+  SAMPLE_WINDOW_Y,
   SCREW,
+  SCREW_FLIGHT_OUTER_R,
+  SCREW_SHAFT_R,
   SCREW_TURNS,
   coreMouthY,
   screwTipY,
@@ -27,13 +29,17 @@ import styles from './Drill2DScene.module.css';
 const cssVar = (name: string) =>
   getComputedStyle(document.documentElement).getPropertyValue(name).trim();
 
-// World box the elevation fits into, with headroom for the raised core cap.
-const VIEW = {
-  yMin: PLATE_TOP_Y - PLATE_THICKNESS - 0.02,
-  yMax: CORE_MOUTH_TOP_Y + CORE.h + MOTOR.h + 0.02,
-  xHalf: PLATE.w / 2 + 0.02,
-};
+/** World box the elevation fits into, from the hopper floor to the raised cap. */
+export function elevationBounds() {
+  return {
+    yMin: HOPPER.y0 - 0.01,
+    yMax: CORE_MOUTH_TOP_Y + CORE.h + CORE_CAP.h + MOTOR.h + 0.02,
+    xHalf: HOPPER.outerR + 0.01,
+  };
+}
+
 const PAD = 0.9;
+const BIN_TICK_H = 0.006;
 
 function draw(cv: HTMLCanvasElement, pose: DrillPose) {
   const ctx = cv.getContext('2d');
@@ -55,11 +61,12 @@ function draw(cv: HTMLCanvasElement, pose: DrillPose) {
   };
   const mono = cssVar('--font-mono') || 'monospace';
 
-  const worldW = VIEW.xHalf * 2;
-  const worldH = VIEW.yMax - VIEW.yMin;
+  const view = elevationBounds();
+  const worldW = view.xHalf * 2;
+  const worldH = view.yMax - view.yMin;
   const scale = Math.min(vw / worldW, vh / worldH) * PAD;
   const ox = vw / 2;
-  const oy = vh / 2 + ((VIEW.yMax + VIEW.yMin) / 2) * scale;
+  const oy = vh / 2 + ((view.yMax + view.yMin) / 2) * scale;
   const X = (x: number) => ox + x * scale;
   const Y = (y: number) => oy - y * scale;
 
@@ -82,53 +89,77 @@ function draw(cv: HTMLCanvasElement, pose: DrillPose) {
   const coreColor = halted
     ? C.fg4
     : pose.augerDirection === AugerDirection.SWITCH ? C.accent : bodyColor;
+  // The hopper reads as background so it does not compete with the column.
+  const deckColor = C.fg4;
 
-  // Container plate with its container marks.
-  ctx.strokeStyle = shellColor;
-  ctx.lineWidth = 1.4;
-  ctx.strokeRect(
-    X(-PLATE.w / 2),
-    Y(PLATE_TOP_Y),
-    PLATE.w * scale,
-    PLATE_THICKNESS * scale,
-  );
-  const step = PLATE.w / (CONTAINERS + 1);
-  ctx.strokeStyle = C.fg4;
+  // Sample hopper: conical throat, outer walls, and one tick per bin.
+  const hopperH = HOPPER.y1 - HOPPER.y0;
+  ctx.strokeStyle = deckColor;
   ctx.lineWidth = 1.2;
-  for (let i = 0; i < CONTAINERS; i += 1) {
-    const cx = (i + 1) * step - PLATE.w / 2;
+  ctx.beginPath();
+  for (const s of [-1, 1]) {
+    ctx.moveTo(X(s * HOPPER.coneBottomR), Y(HOPPER.y0));
+    ctx.lineTo(X(s * HOPPER.throatR), Y(HOPPER.y1));
+  }
+  ctx.moveTo(X(-HOPPER.outerR), Y(HOPPER.y0));
+  ctx.lineTo(X(HOPPER.outerR), Y(HOPPER.y0));
+  ctx.stroke();
+  for (const s of [-1, 1]) {
+    const outer = s * HOPPER.outerR;
+    const inner = s * (HOPPER.outerR - HOPPER.wallThickness);
     ctx.strokeRect(
-      X(cx - CONTAINER.r),
-      Y(PLATE_TOP_Y + CONTAINER.h),
-      CONTAINER.r * 2 * scale,
-      CONTAINER.h * scale,
+      X(Math.min(outer, inner)),
+      Y(HOPPER.y1),
+      Math.abs(outer - inner) * scale,
+      hopperH * scale,
+    );
+  }
+  ctx.beginPath();
+  const binR = (HOPPER.coneBottomR + HOPPER.outerR) / 2;
+  for (const span of binSpans()) {
+    const mid = ((span.fromDeg + span.toDeg) / 2) * Math.PI / 180;
+    const bx = X(binR * Math.cos(mid));
+    ctx.moveTo(bx, Y(HOPPER.y0));
+    ctx.lineTo(bx, Y(HOPPER.y0 + BIN_TICK_H));
+  }
+  ctx.stroke();
+
+  // Base plate the column stands on, body and rim as one section.
+  ctx.strokeStyle = shellColor;
+  ctx.lineWidth = 1.2;
+  for (const s of [-1, 1]) {
+    const a = s * BASE_PLATE.boreR;
+    const b = s * BASE_PLATE.outerR;
+    ctx.strokeRect(
+      X(Math.min(a, b)),
+      Y(BASE_PLATE_RIM.y1),
+      Math.abs(b - a) * scale,
+      (BASE_PLATE_RIM.y1 - BASE_PLATE.y0) * scale,
     );
   }
 
-  // Barrel walls, drawn with the sample windows left open.
-  const slotTop = BARREL.h - BARREL_RING_H;
-  const slotBot = BARREL_RING_H;
-  const bandH = (slotTop - slotBot) / BARREL_SLOTS;
+  // Barrel walls, broken where the sample windows cross the elevation plane.
   ctx.strokeStyle = shellColor;
   ctx.lineWidth = 1.6;
   ctx.beginPath();
   for (const s of [-1, 1]) {
     const wx = X(s * BARREL.r);
     ctx.moveTo(wx, Y(0));
-    ctx.lineTo(wx, Y(slotBot));
-    for (let i = 0; i < BARREL_SLOTS; i += 1) {
-      const gapA = slotBot + i * bandH + bandH * 0.25;
-      const gapB = slotBot + i * bandH + bandH * 0.75;
-      ctx.moveTo(wx, Y(gapA));
-      ctx.lineTo(wx, Y(gapB));
-    }
-    ctx.moveTo(wx, Y(slotTop));
+    ctx.lineTo(wx, Y(SAMPLE_WINDOW_Y.y0));
+    ctx.moveTo(wx, Y(SAMPLE_WINDOW_Y.y1));
     ctx.lineTo(wx, Y(BARREL.h));
   }
   ctx.moveTo(X(-BARREL.r), Y(0));
   ctx.lineTo(X(BARREL.r), Y(0));
   ctx.moveTo(X(-BARREL.r), Y(BARREL.h));
   ctx.lineTo(X(BARREL.r), Y(BARREL.h));
+  ctx.stroke();
+
+  // Lift pinion, on the left because its CAD azimuth is 270 deg.
+  ctx.strokeStyle = bodyColor;
+  ctx.lineWidth = 1.2;
+  ctx.beginPath();
+  ctx.arc(X(-PINION.centerR), Y(PINION.centerY), PINION.tipR * scale, 0, Math.PI * 2);
   ctx.stroke();
 
   // Servo 11 block at the barrel base.
@@ -144,34 +175,43 @@ function draw(cv: HTMLCanvasElement, pose: DrillPose) {
   const mouth = coreMouthY(pose.heightNorm);
   const tip = screwTipY(pose.heightNorm);
 
-  // Core column and the servo 12 block riding on its cap.
+  // Core column, its cap, and the servo 12 block riding on top.
   ctx.strokeStyle = coreColor;
   ctx.lineWidth = 1.6;
   ctx.strokeRect(X(-CORE.r), Y(mouth + CORE.h), CORE.r * 2 * scale, CORE.h * scale);
   ctx.strokeStyle = bodyColor;
   ctx.lineWidth = 1.2;
   ctx.strokeRect(
+    X(-CORE_CAP.r),
+    Y(mouth + CORE.h + CORE_CAP.h),
+    CORE_CAP.r * 2 * scale,
+    CORE_CAP.h * scale,
+  );
+  ctx.strokeRect(
     X(-MOTOR.w / 2),
-    Y(mouth + CORE.h + MOTOR.h),
+    Y(mouth + CORE.h + CORE_CAP.h + MOTOR.h),
     MOTOR.w * scale,
     MOTOR.h * scale,
   );
 
-  // Screw flight, the helix projected onto the elevation plane.
+  // Auger flight envelope: both ribbon edges plus the shaft, so it reads as a
+  // flight rather than a single wire.
   ctx.strokeStyle = screwColor;
   ctx.lineWidth = 1.2;
   ctx.beginPath();
-  const steps = SCREW_TURNS * 24;
-  for (let i = 0; i <= steps; i += 1) {
-    const t = i / steps;
-    const px = X(SCREW.r * Math.cos(t * SCREW_TURNS * Math.PI * 2));
-    const py = Y(tip + t * SCREW.h);
-    if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+  const steps = Math.ceil(SCREW_TURNS * 24);
+  for (const s of [-1, 1]) {
+    for (let i = 0; i <= steps; i += 1) {
+      const t = i / steps;
+      const px = X(s * SCREW_FLIGHT_OUTER_R * Math.cos(t * SCREW_TURNS * Math.PI * 2));
+      const py = Y(tip + t * SCREW.h);
+      if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+    }
   }
-  ctx.stroke();
-  ctx.beginPath();
-  ctx.moveTo(X(0), Y(tip));
-  ctx.lineTo(X(0), Y(tip + SCREW.h));
+  for (const s of [-1, 1]) {
+    ctx.moveTo(X(s * SCREW_SHAFT_R), Y(tip));
+    ctx.lineTo(X(s * SCREW_SHAFT_R), Y(tip + SCREW.h));
+  }
   ctx.stroke();
 
   if (pose.heightNorm == null) {
