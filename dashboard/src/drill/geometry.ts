@@ -5,9 +5,43 @@
 // Frame: +Y up, origin at the barrel base ring, barrel axis on Y.
 import * as THREE from 'three';
 import { AugerDirection } from '../proto/drill_pb';
+import { fromCadZ, hopperY } from './parts/frame';
 
-export const BARREL = { r: 0.0625, h: 0.216 };
-export const CORE = { r: 0.0245, h: 0.250 };
+/** Barrel tube. r is the outer radius; the bore is a separate constant. */
+export const BARREL = { r: 0.030, h: 0.216 };
+export const BARREL_BORE_R = 0.026;
+export const BARREL_FLANGE = [
+  { r: 0.0624, y0: fromCadZ(10), y1: fromCadZ(14) },
+  { r: 0.048, y0: fromCadZ(14), y1: fromCadZ(18) },
+] as const;
+
+/** Continuous window the lift pinion reaches the core through. */
+export const PINION_WINDOW = { fromDeg: 244, toDeg: 296, y0: fromCadZ(70), y1: fromCadZ(226.4) };
+
+/** Sample windows, cut only through the middle band of the barrel. */
+export const SAMPLE_WINDOWS = [
+  { fromDeg: 72, toDeg: 108 },
+  { fromDeg: 162, toDeg: 198 },
+  { fromDeg: 342, toDeg: 378 },
+] as const;
+export const SAMPLE_WINDOW_Y = { y0: fromCadZ(100), y1: fromCadZ(190) };
+
+/** Core column. r is the plain outer radius, between the toothed sectors. */
+export const CORE = { r: 0.0225, h: 0.250 };
+export const CORE_BORE_R = 0.020;
+export const CORE_TOOTH_CREST_R = 0.025;
+export const CORE_TOOTH_PITCH = 0.0042;
+export const CORE_TOOTH_LAND = 0.00152;
+export const CORE_TOOTH_SECTORS = [
+  { fromDeg: 18, toDeg: 72 },
+  { fromDeg: 108, toDeg: 162 },
+  { fromDeg: 198, toDeg: 252 },
+  { fromDeg: 288, toDeg: 342 },
+] as const;
+
+export const CORE_CAP = { r: 0.025, h: 0.0075 };
+export const SCREW_MOUNT = { r: 0.0196, h: 0.0235 };
+
 export const SCREW = { r: 0.019, h: 0.284, tipBelowMouth: 0.037 };
 export const PLATE = { w: 0.175, d: 0.117 };
 export const MOTOR = { w: 0.028, d: 0.035, h: 0.056 };
@@ -29,10 +63,52 @@ export const BARREL_SLOTS = 4;
 export const BARREL_SLOT_FRACTION = 0.34;
 export const BARREL_RING_H = 0.012;
 
-export const SCREW_TURNS = 9;
-export const SCREW_PITCH = SCREW.h / SCREW_TURNS;
+/** Auger flight is a ribbon between two radii, not a swept tube. */
+export const SCREW_SHAFT_R = 0.00499;
+export const SCREW_FLIGHT_INNER_R = 0.005;
+export const SCREW_FLIGHT_OUTER_R = 0.019;
+export const SCREW_FLIGHT_THICKNESS = 0.00483;
+export const SCREW_PITCH = 0.036;
+export const SCREW_TURNS = SCREW.h / SCREW_PITCH;
+/** Dead: radius of the old swept-tube flight, kept until the scene is rebuilt. */
 export const SCREW_FLIGHT_R = 0.0035;
-export const SCREW_SHAFT_R = 0.006;
+
+export const BASE_PLATE = {
+  boreR: 0.02625,
+  outerR: 0.0675,
+  y0: fromCadZ(0),
+  y1: fromCadZ(8),
+};
+export const BASE_PLATE_RIM = {
+  innerR: 0.06354,
+  outerR: 0.0668,
+  y0: fromCadZ(8),
+  y1: fromCadZ(15),
+};
+
+export const PINION = {
+  teeth: 26,
+  tipR: 0.01708,
+  rootR: 0.01434,
+  boreR: 0.00384,
+  thickness: 0.008,
+  centerR: 0.03962,
+  centerY: fromCadZ(37.26),
+  azimuthDeg: 270,
+};
+
+export const HOPPER = {
+  outerR: 0.075,
+  wallThickness: 0.003,
+  coneBottomR: 0.042,
+  throatR: 0.027,
+  y0: hopperY(122.4),
+  y1: hopperY(209.4),
+  arcFromDeg: 330,
+  arcToDeg: 569,
+};
+export const HOPPER_DIVIDERS_DEG = [42, 138] as const;
+export const HOPPER_DIVIDER_WIDTH_DEG = 3;
 
 /** Full-scale magnitude of the servo speed register, used to scale drill spin. */
 export const SPIN_VEL_RAW_FULL = 1023;
