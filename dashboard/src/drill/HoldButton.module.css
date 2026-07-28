@@ -1,8 +1,11 @@
 /* Hold-to-move control. Sits in the HEIGHT and AUGER cards and in the teleop
    window, so the button carries its own reason line rather than a card slot. */
+/* flex-start, not the default stretch: a column stretches its button to the
+   width of the reason text under it, leaving the label adrift in an empty box. */
 .wrap {
   display: flex;
   flex-direction: column;
+  align-items: flex-start;
   gap: var(--space-xs);
   min-width: 0;
 }

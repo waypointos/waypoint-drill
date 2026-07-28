@@ -49,46 +49,46 @@ export function HeightCard({ state, height, cal, halted }: {
           <span>top</span>
           <span>bottom</span>
         </div>
+        {/* The header note already carries the N/A; this line carries the why. */}
         {height.text === null ? (
-          <p className={styles.reason} data-testid="height-na">
-            <span className={styles.na}>N/A</span> · {height.reason}
-          </p>
+          <p className={styles.reason} data-testid="height-na">{height.reason}</p>
         ) : null}
       </div>
 
-      <div className={styles.row}>
-        <HoldButton
-          label="jog up"
-          makeCmd={() => jogLiftCmd(1)}
-          makeZero={() => jogLiftCmd(0)}
-          halted={halted}
-          testId="jog-up"
-        />
-        <HoldButton
-          label="jog down"
-          makeCmd={() => jogLiftCmd(-1)}
-          makeZero={() => jogLiftCmd(0)}
-          halted={halted}
-          testId="jog-down"
-        />
-      </div>
-
-      <div className={styles.row}>
-        <label className={styles.slider}>
-          <span className={styles.sliderLbl}>goto</span>
-          <input
-            type="range"
-            min={0}
-            max={100}
-            step={GOTO_STEP}
-            value={target}
-            disabled={!calibrated}
-            onChange={(e) => setTarget(Number(e.target.value))}
-            data-testid="goto-slider"
+      <div className={styles.grid}>
+        <span className={styles.rowLabel}>jog</span>
+        <div className={styles.controls}>
+          <HoldButton
+            label="jog up"
+            makeCmd={() => jogLiftCmd(1)}
+            makeZero={() => jogLiftCmd(0)}
+            halted={halted}
+            testId="jog-up"
           />
-          <span className={styles.sliderVal}>{target} %</span>
-        </label>
-        <div className={styles.gated}>
+          <HoldButton
+            label="jog down"
+            makeCmd={() => jogLiftCmd(-1)}
+            makeZero={() => jogLiftCmd(0)}
+            halted={halted}
+            testId="jog-down"
+          />
+        </div>
+
+        <span className={styles.rowLabel}>goto</span>
+        <div className={styles.controls}>
+          <label className={styles.slider}>
+            <input
+              type="range"
+              min={0}
+              max={100}
+              step={GOTO_STEP}
+              value={target}
+              disabled={!calibrated}
+              onChange={(e) => setTarget(Number(e.target.value))}
+              data-testid="goto-slider"
+            />
+            <span className={styles.sliderVal}>{target} %</span>
+          </label>
           <button
             type="button"
             className={styles.btn}
@@ -98,24 +98,23 @@ export function HeightCard({ state, height, cal, halted }: {
           >
             Go
           </button>
-          {calibrated ? null : (
-            <span className={styles.reason} data-testid="goto-reason">
-              uncalibrated · run a travel calibration first
-            </span>
-          )}
         </div>
-      </div>
+        {calibrated ? null : (
+          <p className={`${styles.reason} ${styles.rowReason}`} data-testid="goto-reason">
+            uncalibrated · run a travel calibration first
+          </p>
+        )}
 
-      <div className={styles.row}>
-        <button
-          type="button"
-          className={styles.btn}
-          onClick={() => send(setTopCmd())}
-          data-testid="set-top"
-        >
-          Set top here
-        </button>
-        <div className={styles.gated}>
+        <span className={styles.rowLabel}>mark</span>
+        <div className={styles.controls}>
+          <button
+            type="button"
+            className={styles.btn}
+            onClick={() => send(setTopCmd())}
+            data-testid="set-top"
+          >
+            Set top here
+          </button>
           <button
             type="button"
             className={styles.btn}
@@ -125,12 +124,12 @@ export function HeightCard({ state, height, cal, halted }: {
           >
             Set bottom here
           </button>
-          {!homed ? (
-            <span className={styles.reason} data-testid="set-bottom-reason">
-              unhomed · set the top first
-            </span>
-          ) : null}
         </div>
+        {!homed ? (
+          <p className={`${styles.reason} ${styles.rowReason}`} data-testid="set-bottom-reason">
+            unhomed · set the top first
+          </p>
+        ) : null}
       </div>
 
       {cal ? (

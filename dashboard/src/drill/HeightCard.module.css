@@ -27,15 +27,35 @@
   color: var(--color-fg-4);
 }
 
-.row {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: flex-start;
-  gap: var(--space-md);
+/* Label column plus a control column, so every row starts on the same edge and
+   each gating reason sits under the control it gates rather than beside it. */
+/* baseline, so each label sits on the text baseline of the first control beside
+   it whatever that control's height is. */
+.grid {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  align-items: baseline;
+  gap: var(--space-sm) var(--space-md);
   margin-top: var(--space-md);
 }
 
-.gated { display: flex; flex-direction: column; gap: var(--space-xs); min-width: 0; }
+.rowLabel {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-fg-3);
+}
+
+.controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-sm) var(--space-md);
+  min-width: 0;
+}
+
+.rowReason { grid-column: 2; margin: 0; }
 
 .btn {
   padding: var(--space-sm) var(--space-md);
@@ -70,16 +90,12 @@
 
 .slider input { accent-color: var(--color-accent); width: 160px; max-width: 40vw; }
 
-.sliderLbl {
-  font-size: 10px;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--color-fg-3);
+.sliderVal {
+  color: var(--color-fg-2);
+  font-variant-numeric: tabular-nums;
+  /* Fixed width so the Go button beside it does not shift as the value changes. */
+  min-width: 4ch;
 }
-
-.sliderVal { color: var(--color-fg-2); font-variant-numeric: tabular-nums; }
-
-.na { color: var(--color-fg-4); }
 
 .reason {
   margin: 0;
