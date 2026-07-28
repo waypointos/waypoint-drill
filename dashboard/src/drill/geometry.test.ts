@@ -9,7 +9,6 @@ import {
   CORE_TOOTH_SECTORS,
   HOPPER,
   HOPPER_DIVIDERS_DEG,
-  HelixCurve,
   NOMINAL_SPIN_RAD_PER_SEC,
   PINION,
   PINION_WINDOW,
@@ -22,7 +21,6 @@ import {
   SWITCH_SPIN_RAD_PER_SEC,
   TRAVEL_M,
   coreOffsetY,
-  helixPoint,
   screwTipY,
   spinRadPerSec,
 } from './geometry';
@@ -97,32 +95,6 @@ describe('spinRadPerSec', () => {
   it('holds the switch rate fixed, since core yaw is not measured', () => {
     expect(spinRadPerSec(AugerDirection.SWITCH, 50, false))
       .toBeCloseTo(spinRadPerSec(AugerDirection.SWITCH, 900, false), 6);
-  });
-});
-
-describe('helixPoint', () => {
-  it('spans the screw length between its endpoints', () => {
-    const a = helixPoint(0);
-    const b = helixPoint(1);
-    expect(b.y - a.y).toBeCloseTo(SCREW.h, 6);
-    expect(a.y).toBeCloseTo(-SCREW.h / 2, 6);
-    expect(b.y).toBeCloseTo(SCREW.h / 2, 6);
-  });
-
-  it('stays on the flight radius', () => {
-    for (const t of [0, 0.13, 0.5, 0.77, 1]) {
-      const p = helixPoint(t);
-      expect(Math.hypot(p.x, p.z)).toBeCloseTo(SCREW.r, 6);
-    }
-  });
-
-  it('is exposed as a three curve for the tube sweep', () => {
-    const c = new HelixCurve();
-    const p = c.getPoint(0.25);
-    const q = helixPoint(0.25);
-    expect(p.x).toBeCloseTo(q.x, 6);
-    expect(p.y).toBeCloseTo(q.y, 6);
-    expect(p.z).toBeCloseTo(q.z, 6);
   });
 });
 

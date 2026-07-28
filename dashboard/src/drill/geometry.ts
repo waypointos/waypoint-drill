@@ -3,7 +3,6 @@
 // schematic can be built from one source without shipping a mesh.
 //
 // Frame: +Y up, origin at the barrel base ring, barrel axis on Y.
-import * as THREE from 'three';
 import { AugerDirection } from '../proto/drill_pb';
 import { fromCadZ, hopperY } from './parts/frame';
 
@@ -43,25 +42,13 @@ export const CORE_CAP = { r: 0.025, h: 0.0075 };
 export const SCREW_MOUNT = { r: 0.0196, h: 0.0235 };
 
 export const SCREW = { r: 0.019, h: 0.284, tipBelowMouth: 0.037 };
-export const PLATE = { w: 0.175, d: 0.117 };
 export const MOTOR = { w: 0.028, d: 0.035, h: 0.056 };
-export const CONTAINERS = 3;
 
 /** Full lift travel between the raised and lowered limits. */
 export const TRAVEL_M = 0.14;
 
 /** Y of the core mouth (its lower rim) at the raised limit. */
 export const CORE_MOUTH_TOP_Y = 0.02;
-
-/** Top face of the container plate, clear of the screw at full descent. */
-export const PLATE_TOP_Y = -0.21;
-export const PLATE_THICKNESS = 0.008;
-export const CONTAINER = { r: 0.022, h: 0.030 };
-
-/** Sample windows cut into the barrel wall, as wall sectors with gaps. */
-export const BARREL_SLOTS = 4;
-export const BARREL_SLOT_FRACTION = 0.34;
-export const BARREL_RING_H = 0.012;
 
 /** Auger flight is a ribbon between two radii, not a swept tube. */
 export const SCREW_SHAFT_R = 0.00499;
@@ -70,8 +57,6 @@ export const SCREW_FLIGHT_OUTER_R = 0.019;
 export const SCREW_FLIGHT_THICKNESS = 0.00483;
 export const SCREW_PITCH = 0.036;
 export const SCREW_TURNS = SCREW.h / SCREW_PITCH;
-/** Dead: radius of the old swept-tube flight, kept until the scene is rebuilt. */
-export const SCREW_FLIGHT_R = 0.0035;
 
 export const BASE_PLATE = {
   boreR: 0.02625,
@@ -167,31 +152,4 @@ export function spinRadPerSec(
   }
   if (dir === AugerDirection.SWITCH) return -SWITCH_SPIN_RAD_PER_SEC;
   return 0;
-}
-
-/**
- * Point on the screw flight helix in the screw's own frame, t in 0..1 from the
- * tip to the top. Y spans exactly SCREW.h so the tube centers on the group.
- */
-export function helixPoint(t: number): { x: number; y: number; z: number } {
-  const a = t * SCREW_TURNS * Math.PI * 2;
-  return {
-    x: SCREW.r * Math.cos(a),
-    y: -SCREW.h / 2 + t * SCREW.h,
-    z: SCREW.r * Math.sin(a),
-  };
-}
-
-/** Curve adapter so TubeGeometry can sweep the flight profile. */
-export class HelixCurve extends THREE.Curve<THREE.Vector3> {
-  // three types Curve's constructor as protected, so the subclass has to
-  // publish its own before callers can instantiate the sweep.
-  constructor() {
-    super();
-  }
-
-  getPoint(t: number, target = new THREE.Vector3()): THREE.Vector3 {
-    const p = helixPoint(t);
-    return target.set(p.x, p.y, p.z);
-  }
 }
