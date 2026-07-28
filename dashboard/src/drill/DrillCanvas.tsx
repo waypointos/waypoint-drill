@@ -9,8 +9,8 @@ import { BARREL } from './geometry';
 // Module-level stable references. The scene re-renders at telemetry rate, and
 // fresh object literals would make R3F re-reconcile the renderer prefs on every
 // frame, which can surface as a lost WebGL context.
-const HERO_CAMERA = { position: [0.35, 0.28, 0.35] as const, fov: 45 };
-const COMPACT_CAMERA = { position: [0.44, 0.32, 0.44] as const, fov: 45 };
+const HERO_CAMERA = { position: [0.56, 0.45, 0.56] as const, fov: 45 };
+const COMPACT_CAMERA = { position: [0.70, 0.51, 0.70] as const, fov: 45 };
 const DPR_RANGE: [number, number] = [1, 1.5];
 const GL_PROPS = {
   alpha: true,
@@ -22,7 +22,8 @@ const GL_PROPS = {
   preserveDrawingBuffer: false,
 };
 const CANVAS_STYLE = { background: 'transparent' as const };
-const ORBIT_TARGET: [number, number, number] = [0, BARREL.h / 2, 0];
+// The assembly now hangs well below y = 0, so the framing centre drops.
+const ORBIT_TARGET: [number, number, number] = [0, BARREL.h / 4, 0];
 const LIGHT_POSITION: [number, number, number] = [3, 5, 2];
 
 // Treats the GPU as fallible: prevents default on context loss so the browser
@@ -33,7 +34,7 @@ function CanvasInit({ onLost, onRestored }: { onLost: () => void; onRestored: ()
   const camera = useThree((s) => s.camera) as THREE.PerspectiveCamera;
 
   useEffect(() => {
-    camera.lookAt(0, BARREL.h / 2, 0);
+    camera.lookAt(...ORBIT_TARGET);
   }, [camera]);
 
   useEffect(() => {
