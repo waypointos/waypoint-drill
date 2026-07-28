@@ -1,6 +1,6 @@
 // DrillCommand builders and the module's subject helpers. The tab and the
 // teleop window both publish encoded bytes on one leaf, `drill.cmd`.
-import { Calibrate, DrillCommand, GotoHeight, JogLift, RunAuger } from './proto/drill_pb';
+import { DrillCommand, GotoHeight, JogLift, RunAuger } from './proto/drill_pb';
 
 /** Everything the module may touch sits under this host-enforced prefix. */
 export function drillSubject(roverId: string, leaf: string): string {
@@ -49,11 +49,12 @@ export function stopCmd(): Uint8Array {
   return encode({ case: 'stop', value: true });
 }
 
-export function homeCmd(): Uint8Array {
-  return encode({ case: 'home', value: true });
+/** Anchors height 0 where the lift is standing. Moves nothing; refused while it moves. */
+export function setTopCmd(): Uint8Array {
+  return encode({ case: 'setTop', value: true });
 }
 
-/** `run` true starts the travel calibration, false aborts a running one. */
-export function calibrateCmd(run: boolean): Uint8Array {
-  return encode({ case: 'calibrate', value: new Calibrate({ run }) });
+/** Records the travel span from the top anchor down to where the lift is standing. */
+export function setBottomCmd(): Uint8Array {
+  return encode({ case: 'setBottom', value: true });
 }

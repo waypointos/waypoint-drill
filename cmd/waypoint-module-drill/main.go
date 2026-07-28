@@ -127,8 +127,8 @@ func setup(m *wpmodule.M, configPath string) (<-chan struct{}, error) {
 		slog.Info("lift calibration loaded", "travel_ticks", cal.TravelTicks)
 	}
 
-	// Procedure progress goes to the calibration leaf; a completed run persists
-	// its travel span so the axis stays calibrated across restarts.
+	// Mark outcomes go to the calibration leaf; a marked bottom persists its
+	// travel span so the axis stays calibrated across restarts.
 	calSubject := m.Subject("calibration")
 	events := func(phase string, travel *int64, detail string) {
 		ev := &drillv1.CalibrationEvent{T: timestamppb.Now(), Phase: phase, TravelTicks: travel, Detail: detail}
@@ -266,11 +266,13 @@ func statsLoop(m *wpmodule.M, reads *readCache, statsSubject string) {
 }
 
 // obsFrom renders one servo read for the lift axis. A failed read, or one whose
-// position the servo did not answer, is not an observation: the axis and the
-// stall detector must never fold in a fabricated position.
+// position the servo did not answer, is not an observation: the axis must never
+// fold in a fabricated position. Speed and load are optional on the wire, and an
+// absent one reads as a real zero downstream, so their absence fails the read
+// rather than passing a fake value on.
 func obsFrom(st *drillv1.ServoState, err error, now time.Time) lift.Obs {
 	o := lift.Obs{At: now}
-	if err != nil || !st.GetOk() || st.PositionRaw == nil {
+	if err != nil || !st.GetOk() || st.PositionRaw == nil || st.SpeedRaw == nil || st.LoadRaw == nil {
 		return o
 	}
 	o.OK = true

@@ -20,8 +20,9 @@ type Config struct {
 	LiftID  uint32
 	AugerID uint32
 
-	// Sign conventions are per-build wiring: gearing or motor orientation can
-	// invert which raw velocity sign raises the lift or drills.
+	// Sign conventions follow the reference drill assembly, which is the same
+	// gearing and motor orientation for every build of this module. They stay
+	// configurable only so a one-off rebuild can correct itself without a fork.
 	LiftUpSign      int
 	AugerDrillSign  int
 	SwitchDirection string // "ccw" = opposite the drill sign, "cw" = same sign
@@ -30,11 +31,6 @@ type Config struct {
 	SlowJogSpeed int32
 	DrillSpeed   int32
 	SwitchSpeed  int32
-
-	StallLoad     int32
-	StallTicks    int
-	StallSpeedEps int32
-	StallDeltaEps int64
 
 	TopBandFraction float64
 	MmPerTick       *float64 // nil keeps height_mm N/A
@@ -51,17 +47,13 @@ func Load(path string) (*Config, error) {
 		StatePath:           "/var/lib/waypoint-module-drill/calibration.toml",
 		LiftID:              11,
 		AugerID:             12,
-		LiftUpSign:          1,
-		AugerDrillSign:      1,
+		LiftUpSign:          -1,
+		AugerDrillSign:      -1,
 		SwitchDirection:     "ccw",
 		JogSpeed:            400,
 		SlowJogSpeed:        150,
 		DrillSpeed:          800,
 		SwitchSpeed:         300,
-		StallLoad:           600,
-		StallTicks:          10,
-		StallSpeedEps:       20,
-		StallDeltaEps:       8,
 		TopBandFraction:     0.03,
 		LiftOvercurrentRaw:  500,
 		AugerOvercurrentRaw: 500,
@@ -83,10 +75,6 @@ func Load(path string) (*Config, error) {
 		SlowJogSpeed        *int32   `toml:"slow_jog_speed"`
 		DrillSpeed          *int32   `toml:"drill_speed"`
 		SwitchSpeed         *int32   `toml:"switch_speed"`
-		StallLoad           *int32   `toml:"stall_load"`
-		StallTicks          *int     `toml:"stall_ticks"`
-		StallSpeedEps       *int32   `toml:"stall_speed_eps"`
-		StallDeltaEps       *int64   `toml:"stall_delta_eps"`
 		TopBandFraction     *float64 `toml:"top_band_fraction"`
 		MmPerTick           *float64 `toml:"mm_per_tick"`
 		LiftOvercurrentRaw  *uint32  `toml:"lift_overcurrent_raw"`
@@ -126,18 +114,6 @@ func Load(path string) (*Config, error) {
 	}
 	if raw.SwitchSpeed != nil {
 		cfg.SwitchSpeed = *raw.SwitchSpeed
-	}
-	if raw.StallLoad != nil {
-		cfg.StallLoad = *raw.StallLoad
-	}
-	if raw.StallTicks != nil {
-		cfg.StallTicks = *raw.StallTicks
-	}
-	if raw.StallSpeedEps != nil {
-		cfg.StallSpeedEps = *raw.StallSpeedEps
-	}
-	if raw.StallDeltaEps != nil {
-		cfg.StallDeltaEps = *raw.StallDeltaEps
 	}
 	if raw.TopBandFraction != nil {
 		cfg.TopBandFraction = *raw.TopBandFraction

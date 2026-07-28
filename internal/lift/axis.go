@@ -42,20 +42,32 @@ func (a *Axis) Observe(o Obs) (int64, bool) {
 }
 
 // AnchorTop marks the current position as the top of travel, height 0.
+//
+// A stored travel span survives this. The span is a physical property of the
+// machine rather than of the anchor, and the encoder loses its reference on
+// every restart, so re-marking the top is the routine per-session step and
+// re-measuring the span is not. Marking a top somewhere other than the usual
+// place invalidates the span, and the remedy is to mark the bottom again.
 func (a *Axis) AnchorTop() {
 	a.anchor = a.pos
 	a.homed = true
 }
 
-// SetTravel records the calibrated travel span; a non-positive span leaves the
-// axis uncalibrated.
-func (a *Axis) SetTravel(ticks int64) {
+// SetTravel records the travel span and reports whether it was taken. A
+// non-positive span is refused rather than stored: it means the bottom was
+// marked at or above the top anchor, which is a mis-mark or an inverted encoder,
+// and clamping it to zero would hide both.
+func (a *Axis) SetTravel(ticks int64) bool {
 	if ticks <= 0 {
-		a.travel = 0
-		return
+		return false
 	}
 	a.travel = ticks
+	return true
 }
+
+// Tracked reports whether any successful read has been folded in yet. Until one
+// has, the position is a placeholder and nothing may be anchored to it.
+func (a *Axis) Tracked() bool { return a.tracked }
 
 func (a *Axis) Homed() bool { return a.homed && a.tracked }
 

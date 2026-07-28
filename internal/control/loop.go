@@ -1,6 +1,5 @@
 // Package control runs the drill's 50 Hz command loop. It turns operator intent
-// and procedure state into signed wheel velocities and owns the halt latch that
-// stops both servos.
+// into signed wheel velocities and owns the halt latch that stops both servos.
 package control
 
 import (
@@ -15,21 +14,17 @@ import (
 	drillv1 "github.com/waypointos/waypoint-drill/protocol/gen/go"
 )
 
-// Tick period, goto arrival band, and how often a running procedure re-reports
-// its phase between transitions.
+// Tick period and the goto arrival band.
 const (
-	tickPeriod  = 20 * time.Millisecond
-	gotoBand    = 0.005
-	eventPeriod = 200 * time.Millisecond
+	tickPeriod = 20 * time.Millisecond
+	gotoBand   = 0.005
 )
 
 // Loop phases, reported on drill.state.
 const (
-	phaseIdle        = "idle"
-	phaseJog         = "jog"
-	phaseGoto        = "goto"
-	phaseHoming      = "homing"
-	phaseCalibrating = "calibrating"
+	phaseIdle = "idle"
+	phaseJog  = "jog"
+	phaseGoto = "goto"
 )
 
 // Halt reasons, reported on drill.state.
@@ -40,9 +35,11 @@ const (
 	haltOvercurrent = "overcurrent"
 )
 
+// Mark outcomes, reported on the calibration leaf.
 const (
-	procHome      = "home"
-	procCalibrate = "calibrate"
+	markTopSet    = "top_set"
+	markBottomSet = "bottom_set"
+	markRefused   = "refused"
 )
 
 const (
@@ -58,8 +55,8 @@ type Bus interface {
 	SetTorqueEnable(id uint32, on bool) error
 }
 
-// Events reports procedure progress. main publishes it on the calibration leaf
-// and persists the travel span on the terminal "done" phase.
+// Events reports the outcome of one operator mark. main publishes it on the
+// calibration leaf and persists the travel span whenever one is reported.
 type Events func(phase string, travel *int64, detail string)
 
 // Status is the loop's outward view, rendered into DrillState.
@@ -87,7 +84,7 @@ type source struct {
 	at time.Time
 }
 
-// pendingEvent is a procedure event queued for dispatch after the mutex drops.
+// pendingEvent is a mark outcome queued for dispatch after the mutex drops.
 type pendingEvent struct {
 	phase  string
 	travel *int64
@@ -113,13 +110,6 @@ type Loop struct {
 	haltReason  string
 	lastRefusal string
 	phase       string
-
-	proc      *lift.Proc
-	procKind  string
-	procPhase string
-	procSign  int
-	stall     *lift.StallDetector
-	lastEvent time.Time
 
 	gotoActive bool
 	gotoTarget float64
@@ -182,7 +172,6 @@ func (l *Loop) SetTeleop(in teleop.Intent, at time.Time) {
 	l.releaseLocked(at)
 	if in.LiftJog != 0 {
 		l.gotoActive = false
-		l.abortProcLocked("superseded by jog")
 	}
 }
 
@@ -202,7 +191,6 @@ func (l *Loop) Command(cmd *drillv1.DrillCommand, at time.Time) {
 		if v != 0 {
 			l.releaseLocked(at)
 			l.gotoActive = false
-			l.abortProcLocked("superseded by jog")
 		}
 		l.cmd.in.LiftJog, l.cmd.at = v, at
 	case *drillv1.DrillCommand_RunAuger:
@@ -225,28 +213,71 @@ func (l *Loop) Command(cmd *drillv1.DrillCommand, at time.Time) {
 			return
 		}
 		l.releaseLocked(at)
-		l.abortProcLocked("superseded by goto_height")
 		l.cmd.in.LiftJog, l.cmd.at = 0, at
 		l.gotoActive, l.gotoTarget = true, clampNorm(a.GotoHeight.GetNorm())
 		l.phase = phaseGoto
-	case *drillv1.DrillCommand_Home:
-		if !a.Home {
-			return
+	case *drillv1.DrillCommand_SetTop:
+		if a.SetTop {
+			l.setTopLocked()
 		}
-		l.releaseLocked(at)
-		l.startProcLocked(procHome, lift.NewHome(), lift.PhaseHoming, at)
-	case *drillv1.DrillCommand_Calibrate:
-		if !a.Calibrate.GetRun() {
-			l.abortProcLocked("aborted by operator")
-			return
+	case *drillv1.DrillCommand_SetBottom:
+		if a.SetBottom {
+			l.setBottomLocked()
 		}
-		if !l.homed {
-			l.lastRefusal = "calibrate: unhomed"
-			return
-		}
-		l.releaseLocked(at)
-		l.startProcLocked(procCalibrate, lift.NewCalibrate(), lift.PhaseRunDown, at)
 	}
+}
+
+// setTopLocked anchors height 0 at wherever the lift is standing. It writes no
+// velocity: the operator jogs to the top and marks it there.
+func (l *Loop) setTopLocked() {
+	if reason, ok := l.markBlockedLocked(); ok {
+		l.refuseMarkLocked("set_top", reason)
+		return
+	}
+	l.axis.AnchorTop()
+	l.refreshAxisLocked()
+	l.emitLocked(markTopSet, nil, "")
+}
+
+// setBottomLocked measures the travel span from the top anchor down to wherever
+// the lift is standing. A bottom at or above the anchor is refused rather than
+// stored as a distance: taking it as one would turn an inverted encoder, or two
+// marks made in the wrong order, into a calibration that reads back healthy.
+func (l *Loop) setBottomLocked() {
+	if reason, ok := l.markBlockedLocked(); ok {
+		l.refuseMarkLocked("set_bottom", reason)
+		return
+	}
+	span, homed := l.axis.HeightTicks()
+	if !homed {
+		l.refuseMarkLocked("set_bottom", "unhomed, mark the top first")
+		return
+	}
+	if !l.axis.SetTravel(span) {
+		l.refuseMarkLocked("set_bottom", "bottom is not below the top anchor")
+		return
+	}
+	l.refreshAxisLocked()
+	l.emitLocked(markBottomSet, &span, "")
+}
+
+// markBlockedLocked names what stops a mark from being trustworthy. Both marks
+// read the axis position, so a moving or unread lift would anchor a stale one.
+func (l *Loop) markBlockedLocked() (string, bool) {
+	switch {
+	case l.halted:
+		return "halted", true
+	case l.liftVel != 0:
+		return "lift is moving", true
+	case !l.axis.Tracked():
+		return "no servo read yet", true
+	}
+	return "", false
+}
+
+func (l *Loop) refuseMarkLocked(cmd, reason string) {
+	l.lastRefusal = cmd + ": " + reason
+	l.emitLocked(markRefused, nil, l.lastRefusal)
 }
 
 // Observe folds one 20 Hz read pair in: it advances the axis, steps a running
@@ -260,12 +291,8 @@ func (l *Loop) Observe(liftObs, augerObs lift.Obs) {
 		now = time.Now()
 	}
 
-	delta, _ := l.axis.Observe(liftObs)
+	l.axis.Observe(liftObs)
 	l.refreshAxisLocked()
-
-	if l.proc != nil {
-		l.stepProcLocked(liftObs, delta, now)
-	}
 
 	liftGap := l.liftDog.Observe(liftObs.OK, now)
 	augerGap := l.augerDog.Observe(augerObs.OK, now)
@@ -354,10 +381,7 @@ func (l *Loop) tick(now time.Time) {
 }
 
 func (l *Loop) liftVelocityLocked() int32 {
-	switch {
-	case l.proc != nil:
-		return scale(l.procSign, l.cfg.SlowJogSpeed, l.cfg.LiftUpSign)
-	case l.gotoActive:
+	if l.gotoActive {
 		return l.gotoVelocityLocked()
 	}
 	speed := l.cfg.JogSpeed
@@ -408,10 +432,6 @@ func (l *Loop) augerVelocityLocked() int32 {
 
 func (l *Loop) phaseForLocked(liftV, augerV int32) string {
 	switch {
-	case l.proc != nil && l.procKind == procHome:
-		return phaseHoming
-	case l.proc != nil:
-		return phaseCalibrating
 	case l.gotoActive:
 		return phaseGoto
 	case liftV != 0 || augerV != 0:
@@ -442,7 +462,6 @@ func (l *Loop) haltLocked(reason string) {
 	l.padArmed = false
 	l.gotoActive = false
 	l.augerDir = dirIdle
-	l.abortProcLocked(reason)
 	l.phase = phaseIdle
 	l.haltWritesLocked()
 	l.refreshSwitchLocked()
@@ -506,70 +525,9 @@ func intentActive(in teleop.Intent) bool {
 	return in.Throttle != 0 && (in.Auger == dirDrill || in.Auger == dirSwitch)
 }
 
-func (l *Loop) startProcLocked(kind string, p *lift.Proc, phase string, at time.Time) {
-	l.abortProcLocked("superseded by " + kind)
-	l.gotoActive = false
-	l.cmd.in.LiftJog = 0
-	l.proc, l.procKind, l.procPhase = p, kind, phase
-	// The procedure drives only once a read has arrived: Step owns the sign.
-	l.procSign = 0
-	l.stall = lift.NewStallDetector(l.cfg.StallLoad, l.cfg.StallTicks, l.cfg.StallSpeedEps, l.cfg.StallDeltaEps)
-	l.phase = phaseHoming
-	if kind == procCalibrate {
-		l.phase = phaseCalibrating
-	}
-	l.emitLocked(phase, nil, "", at)
-}
-
-func (l *Loop) stepProcLocked(o lift.Obs, delta int64, now time.Time) {
-	stalled := l.stall.Observe(o, delta)
-	ticks, _ := l.axis.HeightTicks()
-	res := l.proc.Step(stalled, ticks)
-	l.procSign = res.VelocitySign
-
-	// A finished or aborted leg ends against a hard stop: zero the lift before
-	// anything else, including the event that reports it.
-	if res.Done || res.Aborted {
-		_ = l.bus.SetGoalVelocity(l.cfg.LiftID, 0)
-		l.liftVel = 0
-	}
-	if res.Phase != l.procPhase {
-		l.procPhase = res.Phase
-		l.stall.Reset() // each leg needs its own run of stall evidence
-		l.emitLocked(res.Phase, res.Travel, "", now)
-	} else if now.Sub(l.lastEvent) >= eventPeriod {
-		l.emitLocked(res.Phase, nil, "", now)
-	}
-	if !res.Done && !res.Aborted {
-		return
-	}
-	if res.Done {
-		if l.procKind == procHome {
-			l.axis.AnchorTop()
-		}
-		if res.Travel != nil {
-			l.axis.SetTravel(*res.Travel)
-		}
-		l.refreshAxisLocked()
-	}
-	l.proc, l.procSign = nil, 0
-	l.phase = phaseIdle
-}
-
-func (l *Loop) abortProcLocked(detail string) {
-	if l.proc == nil {
-		return
-	}
-	l.proc.Abort()
-	l.proc, l.procSign = nil, 0
-	l.procPhase = lift.PhaseAborted
-	l.phase = phaseIdle
-	l.emitLocked(lift.PhaseAborted, nil, detail, time.Now())
-}
-
 func (l *Loop) lock() { l.mu.Lock() }
 
-// unlock releases the mutex and only then runs the queued procedure events. The
+// unlock releases the mutex and only then runs the queued mark events. The
 // Events callback publishes and writes calibration to flash, so running it under
 // the lock would stall the tick, and running it inline would let it precede the
 // zero-velocity write that caused it.
@@ -585,8 +543,7 @@ func (l *Loop) unlock() {
 	}
 }
 
-func (l *Loop) emitLocked(phase string, travel *int64, detail string, at time.Time) {
-	l.lastEvent = at
+func (l *Loop) emitLocked(phase string, travel *int64, detail string) {
 	l.pending = append(l.pending, pendingEvent{phase: phase, travel: travel, detail: detail})
 }
 

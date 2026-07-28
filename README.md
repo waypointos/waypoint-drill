@@ -3,7 +3,7 @@
 A two-servo sampling drill as a Waypoint no-rebuild module. Built on the
 Waypoint module SDK (`github.com/waypointos/waypoint/sdk`): the SDK owns
 connect, creds, sd_notify, health, and the stats heartbeat; this repo provides
-the drill's own logic (lift axis, auger interlock, homing and calibration) and
+the drill's own logic (lift axis, auger interlock, travel marking) and
 publishes the open `drill` component class.
 
 The drill drives two module-owned wheel-mode STS3215 servos: bus id 11 is the
@@ -15,8 +15,7 @@ platform descriptor, so the module never writes a servo mode.
 - `cmd/waypoint-module-drill`: entrypoint on `wpmodule.Run`.
 - `internal/servobus`: narrow adapter over the SDK servo client (signed
   velocity, torque, overcurrent ceiling, one raw read).
-- `internal/lift`: encoder unwrapping, stall and read-gap detection, the height
-  axis, and the home/calibrate step machines.
+- `internal/lift`: encoder unwrapping, read-gap detection, and the height axis.
 - `internal/auger`: switch interlock and direction-to-velocity mapping.
 - `internal/control`: the 50 Hz command loop and the halt latch.
 - `internal/teleop`, `internal/config`, `internal/state`, `internal/store`:
@@ -49,8 +48,15 @@ Everything lives in the module sandbox
   sources. Whichever is asking for motion wins, and each ages on its own
   deadman, so a tab-driven jog has to be repeated faster than `stale_input_ms`
   (150 ms by default) to keep running.
-- Height is N/A until the axis is homed, and normalized height is N/A until it
-  is calibrated. Absent fields carry a reason, never a sentinel zero.
+- The lift has no hard stops at either end, so nothing seeks a limit under
+  power. Both ends of travel are marked by the operator: jog to the end, then
+  send `set_top` or `set_bottom`. Neither mark commands a servo, and both are
+  refused while the lift is moving or before the first servo read.
+- Height is N/A until the top is marked, and normalized height is N/A until the
+  span is too. Absent fields carry a reason, never a sentinel zero.
+- A bottom marked at or above the top anchor is refused rather than stored as an
+  absolute span, which would read back as a healthy calibration on an inverted
+  encoder.
 - Switch rotation runs only when the lift is calibrated and inside the top band.
 
 ## Build and test
@@ -81,9 +87,9 @@ are minted):
 make dev
 ```
 
-Confirm `module.drill.drill.state` traffic on the rover's bus. The sim mirrors
-zero load and has no lift hard stops, so homing and calibration are hardware
-bring-up steps rather than sim-verifiable ones.
+Confirm `module.drill.drill.state` traffic on the rover's bus. Marking either
+end of travel works against the sim, since neither mark depends on the lift
+reaching a physical limit.
 
 ## Dashboard
 

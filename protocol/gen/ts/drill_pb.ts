@@ -140,7 +140,7 @@ export class DrillState extends Message<DrillState> {
   haltReason = "";
 
   /**
-   * "idle" | "jog" | "goto" | "homing" | "calibrating"
+   * "idle" | "jog" | "goto"
    *
    * @generated from field: string phase = 15;
    */
@@ -212,6 +212,9 @@ export class DrillState extends Message<DrillState> {
 
 /**
  * ---- tab/teleop -> backend on drill.cmd ----
+ * The lift has no hard stops at either end, so both ends of travel are marked by
+ * the operator: jog to the end, then send the matching mark. Neither mark moves
+ * a servo, and both are refused while the lift is moving.
  *
  * @generated from message waypoint.module.drill.v1.DrillCommand
  */
@@ -253,18 +256,20 @@ export class DrillCommand extends Message<DrillCommand> {
     case: "stop";
   } | {
     /**
-     * creep up to stall, anchor top
+     * anchor the current position as top of travel, height 0
      *
-     * @generated from field: bool home = 5;
+     * @generated from field: bool set_top = 7;
      */
     value: boolean;
-    case: "home";
+    case: "setTop";
   } | {
     /**
-     * @generated from field: waypoint.module.drill.v1.Calibrate calibrate = 6;
+     * record the current position as bottom; travel = ticks below the top anchor
+     *
+     * @generated from field: bool set_bottom = 8;
      */
-    value: Calibrate;
-    case: "calibrate";
+    value: boolean;
+    case: "setBottom";
   } | { case: undefined; value?: undefined } = { case: undefined };
 
   constructor(data?: PartialMessage<DrillCommand>) {
@@ -279,8 +284,8 @@ export class DrillCommand extends Message<DrillCommand> {
     { no: 2, name: "goto_height", kind: "message", T: GotoHeight, oneof: "action" },
     { no: 3, name: "run_auger", kind: "message", T: RunAuger, oneof: "action" },
     { no: 4, name: "stop", kind: "scalar", T: 8 /* ScalarType.BOOL */, oneof: "action" },
-    { no: 5, name: "home", kind: "scalar", T: 8 /* ScalarType.BOOL */, oneof: "action" },
-    { no: 6, name: "calibrate", kind: "message", T: Calibrate, oneof: "action" },
+    { no: 7, name: "set_top", kind: "scalar", T: 8 /* ScalarType.BOOL */, oneof: "action" },
+    { no: 8, name: "set_bottom", kind: "scalar", T: 8 /* ScalarType.BOOL */, oneof: "action" },
   ]);
 
   static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): DrillCommand {
@@ -408,43 +413,6 @@ export class RunAuger extends Message<RunAuger> {
 
   static equals(a: RunAuger | PlainMessage<RunAuger> | undefined, b: RunAuger | PlainMessage<RunAuger> | undefined): boolean {
     return proto3.util.equals(RunAuger, a, b);
-  }
-}
-
-/**
- * @generated from message waypoint.module.drill.v1.Calibrate
- */
-export class Calibrate extends Message<Calibrate> {
-  /**
-   * @generated from field: bool run = 1;
-   */
-  run = false;
-
-  constructor(data?: PartialMessage<Calibrate>) {
-    super();
-    proto3.util.initPartial(data, this);
-  }
-
-  static readonly runtime: typeof proto3 = proto3;
-  static readonly typeName = "waypoint.module.drill.v1.Calibrate";
-  static readonly fields: FieldList = proto3.util.newFieldList(() => [
-    { no: 1, name: "run", kind: "scalar", T: 8 /* ScalarType.BOOL */ },
-  ]);
-
-  static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): Calibrate {
-    return new Calibrate().fromBinary(bytes, options);
-  }
-
-  static fromJson(jsonValue: JsonValue, options?: Partial<JsonReadOptions>): Calibrate {
-    return new Calibrate().fromJson(jsonValue, options);
-  }
-
-  static fromJsonString(jsonString: string, options?: Partial<JsonReadOptions>): Calibrate {
-    return new Calibrate().fromJsonString(jsonString, options);
-  }
-
-  static equals(a: Calibrate | PlainMessage<Calibrate> | undefined, b: Calibrate | PlainMessage<Calibrate> | undefined): boolean {
-    return proto3.util.equals(Calibrate, a, b);
   }
 }
 
@@ -589,7 +557,7 @@ export class DrillStats extends Message<DrillStats> {
 }
 
 /**
- * ---- backend -> tab: home/calibrate progress on the calibration leaf ----
+ * ---- backend -> tab: outcome of one set_top / set_bottom mark ----
  *
  * @generated from message waypoint.module.drill.v1.CalibrationEvent
  */
@@ -600,21 +568,21 @@ export class CalibrationEvent extends Message<CalibrationEvent> {
   t?: Timestamp;
 
   /**
-   * "idle" | "homing" | "run_down" | "run_up" | "done" | "aborted" | "failed"
+   * "top_set" | "bottom_set" | "refused"
    *
    * @generated from field: string phase = 2;
    */
   phase = "";
 
   /**
-   * present on "done"
+   * present on "bottom_set"
    *
    * @generated from field: optional int64 travel_ticks = 3;
    */
   travelTicks?: bigint;
 
   /**
-   * failure/abort reason, "" otherwise
+   * refusal reason, "" otherwise
    *
    * @generated from field: string detail = 4;
    */

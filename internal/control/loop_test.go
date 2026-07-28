@@ -96,6 +96,10 @@ func newFixture(t *testing.T) *fixture {
 	t.Helper()
 	cfg, err := config.Load("")
 	require.NoError(t, err)
+	// Pin both wiring signs positive so a velocity assertion below reads in the
+	// same direction as the intent that produced it. The shipped defaults are
+	// the reference assembly's, and config_test covers those.
+	cfg.LiftUpSign, cfg.AugerDrillSign = 1, 1
 	return newFixtureWith(t, cfg)
 }
 
@@ -120,17 +124,6 @@ func (f *fixture) phases() []string {
 	return out
 }
 
-// transitions collapses the periodic progress repeats so only phase changes show.
-func (f *fixture) transitions() []string {
-	var out []string
-	for _, p := range f.phases() {
-		if len(out) == 0 || out[len(out)-1] != p {
-			out = append(out, p)
-		}
-	}
-	return out
-}
-
 func (f *fixture) lastEvent(t *testing.T) event {
 	t.Helper()
 	f.mu.Lock()
@@ -148,7 +141,7 @@ func (f *fixture) runAuger(dir drillv1.AugerDirection, throttle float64, at time
 }
 
 // observe feeds one read pair; the auger read always answers so only the lift
-// drives the axis and the stall detector.
+// drives the axis.
 func (f *fixture) observe(pos uint16, load, speed int32, at time.Time) {
 	f.loop.Observe(
 		lift.Obs{PositionRaw: pos, LoadRaw: load, SpeedRaw: speed, OK: true, At: at},
@@ -172,8 +165,12 @@ func stopCmd(v bool) *drillv1.DrillCommand {
 	return &drillv1.DrillCommand{Action: &drillv1.DrillCommand_Stop{Stop: v}}
 }
 
-func homeCmd(v bool) *drillv1.DrillCommand {
-	return &drillv1.DrillCommand{Action: &drillv1.DrillCommand_Home{Home: v}}
+func setTopCmd(v bool) *drillv1.DrillCommand {
+	return &drillv1.DrillCommand{Action: &drillv1.DrillCommand_SetTop{SetTop: v}}
+}
+
+func setBottomCmd(v bool) *drillv1.DrillCommand {
+	return &drillv1.DrillCommand{Action: &drillv1.DrillCommand_SetBottom{SetBottom: v}}
 }
 
 func jogCmd(v float64) *drillv1.DrillCommand {
@@ -186,10 +183,6 @@ func gotoCmd(norm float64) *drillv1.DrillCommand {
 
 func augerCmd(throttle float64) *drillv1.DrillCommand {
 	return &drillv1.DrillCommand{Action: &drillv1.DrillCommand_RunAuger{RunAuger: &drillv1.RunAuger{Throttle: throttle}}}
-}
-
-func calibrateCmd(run bool) *drillv1.DrillCommand {
-	return &drillv1.DrillCommand{Action: &drillv1.DrillCommand_Calibrate{Calibrate: &drillv1.Calibrate{Run: run}}}
 }
 
 // ---- halt matrix ----
@@ -363,18 +356,6 @@ func TestStopFalseIsNotAHalt(t *testing.T) {
 	assert.Empty(t, f.bus.ops())
 }
 
-func TestHaltAbortsARunningProcedure(t *testing.T) {
-	f := newFixture(t)
-	f.loop.Command(homeCmd(true), t0)
-	require.Equal(t, []string{"homing"}, f.phases())
-
-	f.loop.Command(stopCmd(true), t0)
-
-	assert.Equal(t, []string{"homing", "aborted"}, f.phases())
-	assert.Equal(t, "stop command", f.lastEvent(t).Detail)
-	assert.Equal(t, "idle", f.loop.Snapshot().Phase)
-}
-
 // ---- jog, goto, hold-to-move ----
 
 func TestUnhomedJogCreepsAtSlowSpeed(t *testing.T) {
@@ -514,19 +495,6 @@ func TestATabJogGoesStaleEvenWhileTheMirrorIsLive(t *testing.T) {
 	assert.Equal(t, "input stale", f.loop.Snapshot().HaltReason)
 }
 
-func TestGamepadJogSupersedesARunningProcedure(t *testing.T) {
-	f := newFixtureWith(t, procConfig(t))
-
-	f.loop.Command(homeCmd(true), t0)
-	at := t0.Add(20 * time.Millisecond)
-	f.jog(-1, at)
-	f.loop.tick(at)
-
-	assert.Equal(t, []string{"homing", "aborted"}, f.phases())
-	assert.Equal(t, int32(-150), f.bus.velocity(11))
-	assert.Equal(t, "jog", f.loop.Snapshot().Phase)
-}
-
 func TestGamepadJogCancelsAGoto(t *testing.T) {
 	f := newFixture(t)
 	f.anchorTop(0, t0)
@@ -659,94 +627,117 @@ func TestGamepadAugerReleaseWritesZero(t *testing.T) {
 	assert.Equal(t, dirIdle, f.loop.Snapshot().AugerDir)
 }
 
-// ---- procedures ----
+// ---- end marks ----
 
-func procConfig(t *testing.T) *config.Config {
-	t.Helper()
-	cfg, err := config.Load("")
-	require.NoError(t, err)
-	cfg.StallTicks = 2
-	return cfg
-}
+func TestSetTopAnchorsHeightZeroWhereTheLiftStands(t *testing.T) {
+	f := newFixture(t)
+	f.observe(1500, 0, 0, t0)
 
-func TestHomeCreepsUpThenAnchorsTopOnStall(t *testing.T) {
-	f := newFixtureWith(t, procConfig(t))
-
-	f.loop.Command(homeCmd(true), t0)
-	assert.Equal(t, "homing", f.loop.Snapshot().Phase)
-
-	f.observe(100, 0, -300, t0)
-	f.loop.tick(t0)
-	assert.Equal(t, int32(150), f.bus.velocity(11), "home creeps up at the slow speed")
-
-	f.observe(100, 700, 0, t0.Add(50*time.Millisecond))
-	assert.False(t, f.axis.Homed(), "one loaded read is not a stall")
-	f.bus.reset()
-	f.observe(100, 700, 0, t0.Add(100*time.Millisecond))
+	f.loop.Command(setTopCmd(true), t0)
 
 	assert.True(t, f.axis.Homed())
-	assert.Equal(t, []string{"velocity 11=0"}, f.bus.ops())
-	assert.Equal(t, []string{"homing", "done"}, f.phases())
+	ticks, ok := f.axis.HeightTicks()
+	require.True(t, ok)
+	assert.Equal(t, int64(0), ticks)
+	assert.Equal(t, []string{"top_set"}, f.phases())
 	assert.Nil(t, f.lastEvent(t).Travel)
+	assert.Empty(t, f.bus.ops(), "a mark commands no servo")
 	assert.Equal(t, "idle", f.loop.Snapshot().Phase)
 }
 
-func TestCalibrateRefusedWhileUnhomed(t *testing.T) {
+func TestSetBottomMeasuresTheSpanBelowTheTopAnchor(t *testing.T) {
 	f := newFixture(t)
+	f.observe(1000, 0, 0, t0)
+	f.loop.Command(setTopCmd(true), t0)
 
-	f.loop.Command(calibrateCmd(true), t0)
+	at := t0.Add(time.Second)
+	f.observe(1900, 0, 0, at)
+	f.loop.Command(setBottomCmd(true), at)
 
-	assert.Equal(t, "calibrate: unhomed", f.loop.Snapshot().LastRefusal)
-	assert.Empty(t, f.phases())
-	assert.Empty(t, f.bus.ops())
-}
-
-func TestCalibrateMeasuresTravelAndSetsTheAxis(t *testing.T) {
-	f := newFixtureWith(t, procConfig(t))
-	f.anchorTop(0, t0)
-
-	at := t0
-	step := func(pos uint16, load, speed int32) {
-		at = at.Add(50 * time.Millisecond)
-		f.observe(pos, load, speed, at)
-	}
-
-	f.loop.Command(calibrateCmd(true), at)
-	assert.Equal(t, "calibrating", f.loop.Snapshot().Phase)
-
-	step(0, 0, 0)
-	f.loop.tick(at)
-	assert.Equal(t, int32(-150), f.bus.velocity(11), "the run starts downward")
-
-	step(500, 0, -300)
-	step(1000, 700, 0) // arrived on the bottom stop, delta still large
-	step(1000, 700, 0)
-	step(1000, 700, 0) // sustained: bottom recorded, run reverses
-	assert.Equal(t, []string{"run_down", "run_up"}, f.transitions())
-	f.loop.tick(at)
-	assert.Equal(t, int32(150), f.bus.velocity(11))
-
-	step(1000, 700, 0) // stall evidence restarts for the up leg
-	step(500, 0, 300)
-	step(100, 700, 0)
-	step(100, 700, 0)
-	f.bus.reset()
-	step(100, 700, 0)
-
-	assert.Equal(t, []string{"run_down", "run_up", "done"}, f.transitions())
+	assert.True(t, f.axis.Calibrated())
+	assert.Equal(t, []string{"top_set", "bottom_set"}, f.phases())
 	done := f.lastEvent(t)
 	require.NotNil(t, done.Travel)
 	assert.Equal(t, int64(900), *done.Travel)
-	assert.True(t, f.axis.Calibrated())
-	assert.Equal(t, []string{"velocity 11=0"}, f.bus.ops())
-	assert.Equal(t, "idle", f.loop.Snapshot().Phase)
+	assert.Empty(t, f.bus.ops())
 }
 
-// The events callback publishes and writes calibration to flash. Both stop
-// paths must have zeroed the lift before it runs, and it must not run under the
-// loop's mutex.
-func TestStopWritesLandBeforeTheProcedureEvent(t *testing.T) {
-	cfg := procConfig(t)
+func TestSetBottomRefusedWhileUnhomed(t *testing.T) {
+	f := newFixture(t)
+	f.observe(1000, 0, 0, t0)
+
+	f.loop.Command(setBottomCmd(true), t0)
+
+	assert.False(t, f.axis.Calibrated())
+	assert.Equal(t, "set_bottom: unhomed, mark the top first", f.loop.Snapshot().LastRefusal)
+	assert.Equal(t, []string{"refused"}, f.phases())
+}
+
+// An inverted encoder, or the two marks made in the wrong order, puts the
+// bottom at or above the anchor. That is refused rather than stored as an
+// absolute span, which would read as a healthy calibration.
+func TestSetBottomRefusesASpanThatIsNotBelowTheAnchor(t *testing.T) {
+	f := newFixture(t)
+	f.observe(1000, 0, 0, t0)
+	f.loop.Command(setTopCmd(true), t0)
+
+	at := t0.Add(time.Second)
+	f.observe(600, 0, 0, at)
+	f.loop.Command(setBottomCmd(true), at)
+
+	assert.False(t, f.axis.Calibrated())
+	assert.Equal(t, "set_bottom: bottom is not below the top anchor", f.loop.Snapshot().LastRefusal)
+	assert.Equal(t, []string{"top_set", "refused"}, f.phases())
+}
+
+func TestMarksRefusedWhileTheLiftIsMoving(t *testing.T) {
+	f := newFixture(t)
+	f.observe(1000, 0, 0, t0)
+	f.jog(1, t0)
+	f.loop.tick(t0)
+	require.NotZero(t, f.bus.velocity(11))
+
+	f.loop.Command(setTopCmd(true), t0)
+
+	assert.False(t, f.axis.Homed())
+	assert.Equal(t, "set_top: lift is moving", f.loop.Snapshot().LastRefusal)
+	assert.Equal(t, []string{"refused"}, f.phases())
+}
+
+func TestMarksRefusedBeforeTheFirstServoRead(t *testing.T) {
+	f := newFixture(t)
+
+	f.loop.Command(setTopCmd(true), t0)
+
+	assert.False(t, f.axis.Homed())
+	assert.Equal(t, "set_top: no servo read yet", f.loop.Snapshot().LastRefusal)
+	assert.Equal(t, []string{"refused"}, f.phases())
+}
+
+// Re-marking the top keeps a stored span: the encoder loses its reference on
+// every restart, so marking the top is routine and re-measuring the span is not.
+func TestSetTopKeepsAStoredTravelSpan(t *testing.T) {
+	f := newFixture(t)
+	f.observe(1000, 0, 0, t0)
+	f.loop.Command(setTopCmd(true), t0)
+	at := t0.Add(time.Second)
+	f.observe(1900, 0, 0, at)
+	f.loop.Command(setBottomCmd(true), at)
+	require.True(t, f.axis.Calibrated())
+
+	at = at.Add(time.Second)
+	f.observe(1000, 0, 0, at)
+	f.loop.Command(setTopCmd(true), at)
+
+	assert.True(t, f.axis.Calibrated())
+	assert.True(t, f.axis.Homed())
+}
+
+// The events callback publishes and writes calibration to flash, so it must not
+// run under the loop's mutex.
+func TestMarkEventRunsOutsideTheLoopMutex(t *testing.T) {
+	cfg, err := config.Load("")
+	require.NoError(t, err)
 	bus := &recBus{}
 	axis := lift.NewAxis()
 	var loop *Loop
@@ -755,52 +746,10 @@ func TestStopWritesLandBeforeTheProcedureEvent(t *testing.T) {
 		loop.Snapshot() // deadlocks if the callback still holds the loop mutex
 	})
 
-	loop.Command(homeCmd(true), t0)
-	require.Equal(t, []string{"event homing"}, bus.ops())
+	loop.Observe(lift.Obs{PositionRaw: 100, OK: true, At: t0}, lift.Obs{OK: true, At: t0})
+	loop.Command(setTopCmd(true), t0)
 
-	loop.Observe(lift.Obs{PositionRaw: 100, LoadRaw: 700, OK: true, At: t0}, lift.Obs{OK: true, At: t0})
-	bus.reset()
-	loop.Observe(lift.Obs{PositionRaw: 100, LoadRaw: 700, OK: true, At: t0.Add(50 * time.Millisecond)},
-		lift.Obs{OK: true, At: t0.Add(50 * time.Millisecond)})
-
-	assert.Equal(t, []string{"velocity 11=0", "event done"}, bus.ops())
-}
-
-func TestHaltWritesLandBeforeTheAbortEvent(t *testing.T) {
-	f := newFixtureWith(t, procConfig(t))
-	f.loop.ev = func(phase string, _ *int64, _ string) { f.bus.mark("event " + phase) }
-
-	f.loop.Command(homeCmd(true), t0)
-	f.bus.reset()
-	f.loop.Command(stopCmd(true), t0)
-
-	assert.Equal(t, append(append([]string{}, haltOps...), "event aborted"), f.bus.ops())
-}
-
-func TestCalibrateAbortReportsAbortedWithoutTravel(t *testing.T) {
-	f := newFixtureWith(t, procConfig(t))
-	f.anchorTop(0, t0)
-
-	f.loop.Command(calibrateCmd(true), t0)
-	f.loop.Command(calibrateCmd(false), t0)
-
-	assert.Equal(t, []string{"run_down", "aborted"}, f.phases())
-	assert.Nil(t, f.lastEvent(t).Travel)
-	assert.False(t, f.axis.Calibrated())
-	assert.Equal(t, "idle", f.loop.Snapshot().Phase)
-}
-
-func TestJogSupersedesARunningProcedure(t *testing.T) {
-	f := newFixtureWith(t, procConfig(t))
-
-	f.loop.Command(homeCmd(true), t0)
-	at := t0.Add(20 * time.Millisecond)
-	f.loop.Command(jogCmd(-1), at)
-	f.loop.tick(at)
-
-	assert.Equal(t, []string{"homing", "aborted"}, f.phases())
-	assert.Equal(t, int32(-150), f.bus.velocity(11))
-	assert.Equal(t, "jog", f.loop.Snapshot().Phase)
+	assert.Equal(t, []string{"event top_set"}, bus.ops())
 }
 
 // ---- shutdown ----

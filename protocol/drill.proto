@@ -36,7 +36,7 @@ message DrillState {
   // Safety and activity.
   bool   halted       = 13;
   string halt_reason  = 14;  // "" | "stop command" | "input stale" | "read gap" | "overcurrent"
-  string phase        = 15;  // "idle" | "jog" | "goto" | "homing" | "calibrating"
+  string phase        = 15;  // "idle" | "jog" | "goto"
   string last_refusal = 16;  // most recent refused command with reason, "" when none
 
   // Raw per-servo telemetry (lift = bus 11, auger = bus 12).
@@ -45,20 +45,26 @@ message DrillState {
 }
 
 // ---- tab/teleop -> backend on drill.cmd ----
+// The lift has no hard stops at either end, so both ends of travel are marked by
+// the operator: jog to the end, then send the matching mark. Neither mark moves
+// a servo, and both are refused while the lift is moving.
 message DrillCommand {
+  // 5 and 6 were `home` and `calibrate`, the powered stall-seeking procedures.
+  reserved 5, 6;
+  reserved "home", "calibrate";
+
   oneof action {
     JogLift    jog_lift    = 1;  // hold-to-move; velocity_norm 0 stops the lift
     GotoHeight goto_height = 2;  // requires calibrated
     RunAuger   run_auger   = 3;  // hold-to-move; throttle 0 stops the auger
     bool       stop        = 4;  // halt latch: zero-write both, torque off, refuse motion until fresh input
-    bool       home        = 5;  // creep up to stall, anchor top
-    Calibrate  calibrate   = 6;
+    bool       set_top     = 7;  // anchor the current position as top of travel, height 0
+    bool       set_bottom  = 8;  // record the current position as bottom; travel = ticks below the top anchor
   }
 }
 message JogLift    { double velocity_norm = 1; }  // -1..1, + is up
 message GotoHeight { double norm = 1; }           // 0..1
 message RunAuger   { double throttle = 1; }       // -1..1, + drill, - switch (interlock applies)
-message Calibrate  { bool run = 1; }              // true starts the travel run, false aborts
 
 // ---- wire-compatible mirror of waypoint.v1.ServoState (agent relays raw bytes) ----
 message ServoState {
@@ -80,10 +86,10 @@ message DrillStats {
   repeated ServoState servos  = 2;  // order: lift, auger
 }
 
-// ---- backend -> tab: home/calibrate progress on the calibration leaf ----
+// ---- backend -> tab: outcome of one set_top / set_bottom mark ----
 message CalibrationEvent {
   google.protobuf.Timestamp t = 1;
-  string phase = 2;  // "idle" | "homing" | "run_down" | "run_up" | "done" | "aborted" | "failed"
-  optional int64 travel_ticks = 3;  // present on "done"
-  string detail = 4;                // failure/abort reason, "" otherwise
+  string phase = 2;  // "top_set" | "bottom_set" | "refused"
+  optional int64 travel_ticks = 3;  // present on "bottom_set"
+  string detail = 4;                // refusal reason, "" otherwise
 }

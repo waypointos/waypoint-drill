@@ -1,12 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import {
-  calibrateCmd,
   calibrationSubject,
   cmdSubject,
   gotoHeightCmd,
-  homeCmd,
   jogLiftCmd,
   runAugerCmd,
+  setBottomCmd,
+  setTopCmd,
   stateSubject,
   statsSubject,
   stopCmd,
@@ -53,16 +53,9 @@ describe('command builders', () => {
     expect(a.value.norm).toBeCloseTo(0.42);
   });
 
-  it('encodes stop and home as true flags', () => {
+  it('encodes stop and both end marks as true flags', () => {
     expect(action(stopCmd())).toEqual({ case: 'stop', value: true });
-    expect(action(homeCmd())).toEqual({ case: 'home', value: true });
-  });
-
-  it('encodes calibrate run and abort', () => {
-    const run = action(calibrateCmd(true));
-    const abort = action(calibrateCmd(false));
-    if (run.case !== 'calibrate' || abort.case !== 'calibrate') throw new Error('expected calibrate');
-    expect(run.value.run).toBe(true);
-    expect(abort.value.run).toBe(false);
+    expect(action(setTopCmd())).toEqual({ case: 'setTop', value: true });
+    expect(action(setBottomCmd())).toEqual({ case: 'setBottom', value: true });
   });
 });

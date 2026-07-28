@@ -1,10 +1,13 @@
 // HEIGHT card: the lift axis. Travel bar plus the four things an operator does
 // to it, each gated exactly where the daemon gates it and carrying the reason
 // when it is closed: jog is always available, goto needs a calibrated span,
-// calibrate needs a home anchor.
+// marking the bottom needs a top anchor.
+//
+// The lift has no hard stops, so both ends are marked by hand: jog to the end,
+// then press the mark. Neither mark commands a servo.
 import { useState } from 'react';
 import { useBridge } from '../bridge';
-import { calibrateCmd, cmdSubject, gotoHeightCmd, homeCmd, jogLiftCmd } from '../commands';
+import { cmdSubject, gotoHeightCmd, jogLiftCmd, setBottomCmd, setTopCmd } from '../commands';
 import type { CalibrationEvent, DrillState } from '../proto/drill_pb';
 import type { HeightReadout } from '../useDrillTelemetry';
 import { Panel } from '../ui/Panel';
@@ -33,7 +36,6 @@ export function HeightCard({ state, height, cal, halted }: {
 
   const calibrated = state?.calibrated ?? false;
   const homed = state?.homed ?? false;
-  const calibrating = state?.phase === 'calibrating';
   const norm = state?.heightNorm ?? null;
   const pct = norm === null ? null : Math.round(Math.min(1, Math.max(0, norm)) * 100);
 
@@ -108,35 +110,24 @@ export function HeightCard({ state, height, cal, halted }: {
         <button
           type="button"
           className={styles.btn}
-          onClick={() => send(homeCmd())}
-          data-testid="home"
+          onClick={() => send(setTopCmd())}
+          data-testid="set-top"
         >
-          Home
+          Set top here
         </button>
         <div className={styles.gated}>
-          {calibrating ? (
-            <button
-              type="button"
-              className={styles.btn}
-              onClick={() => send(calibrateCmd(false))}
-              data-testid="calibrate-abort"
-            >
-              Abort calibration
-            </button>
-          ) : (
-            <button
-              type="button"
-              className={styles.btn}
-              disabled={!homed}
-              onClick={() => send(calibrateCmd(true))}
-              data-testid="calibrate-run"
-            >
-              Run calibration
-            </button>
-          )}
-          {!calibrating && !homed ? (
-            <span className={styles.reason} data-testid="calibrate-reason">
-              unhomed · home the axis first
+          <button
+            type="button"
+            className={styles.btn}
+            disabled={!homed}
+            onClick={() => send(setBottomCmd())}
+            data-testid="set-bottom"
+          >
+            Set bottom here
+          </button>
+          {!homed ? (
+            <span className={styles.reason} data-testid="set-bottom-reason">
+              unhomed · set the top first
             </span>
           ) : null}
         </div>

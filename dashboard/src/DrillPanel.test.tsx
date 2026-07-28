@@ -51,13 +51,13 @@ describe('DrillPanel', () => {
     expect(document.querySelector('[data-drill-feed]')!.textContent).toContain('awaiting');
 
     // Gated controls: goto needs a calibrated span, switch needs the daemon's
-    // allowance, calibrate needs a home anchor. Jog and Home stay open.
+    // allowance, the bottom mark needs a top anchor. Jog and the top mark stay open.
     expect(screen.getByTestId('goto-go')).toBeDisabled();
     expect(screen.getByTestId('auger-switch')).toBeDisabled();
-    expect(screen.getByTestId('calibrate-run')).toBeDisabled();
+    expect(screen.getByTestId('set-bottom')).toBeDisabled();
     expect(screen.getByTestId('jog-up')).toBeEnabled();
     expect(screen.getByTestId('jog-down')).toBeEnabled();
-    expect(screen.getByTestId('home')).toBeEnabled();
+    expect(screen.getByTestId('set-top')).toBeEnabled();
   });
 
   it('shows the height N/A reason the daemon reported', () => {
@@ -104,27 +104,27 @@ describe('DrillPanel', () => {
     expect(screen.getAllByText('below top band').length).toBe(2);
   });
 
-  it('publishes a decodable home command on the module cmd subject', () => {
+  it('publishes a decodable set_top command on the module cmd subject', () => {
     const { publish } = setup();
-    fireEvent.click(screen.getByTestId('home'));
+    fireEvent.click(screen.getByTestId('set-top'));
 
     expect(publish).toHaveBeenCalledWith(CMD, expect.any(Uint8Array));
     const sent = cmds(publish);
     expect(sent).toHaveLength(1);
-    expect(sent[0].action.case).toBe('home');
+    expect(sent[0].action.case).toBe('setTop');
   });
 
   it('renders the calibration phase note from the calibration leaf', () => {
     const { send } = setup();
     send('calibration', new CalibrationEvent({
-      phase: 'run_down',
-      detail: 'seeking the lower limit',
+      phase: 'refused',
+      detail: 'set_bottom: bottom is not below the top anchor',
       travelTicks: 4200n,
     }).toBinary());
 
     const note = screen.getByTestId('cal-note');
-    expect(note).toHaveTextContent('run_down');
-    expect(note).toHaveTextContent('seeking the lower limit');
+    expect(note).toHaveTextContent('refused');
+    expect(note).toHaveTextContent('bottom is not below the top anchor');
     expect(note).toHaveTextContent('travel 4200 ticks');
   });
 
