@@ -1,6 +1,7 @@
 package weight
 
 import (
+	"os"
 	"path/filepath"
 	"testing"
 	"time"
@@ -91,6 +92,31 @@ func TestCalibrateRefusesNonPositiveMass(t *testing.T) {
 	require.NoError(t, w.Tare())
 	require.Error(t, w.Calibrate(0))
 	require.Error(t, w.Calibrate(-10))
+}
+
+func TestCalibrateRefusesTinyCountChange(t *testing.T) {
+	w, evs, _ := newTest(t)
+	w.Observe(allOK([3]int32{1000, 2000, 3000}))
+	require.NoError(t, w.Tare())
+	// One count of drift is not a mass resting on the plate.
+	w.Observe(allOK([3]int32{1001, 2000, 3000}))
+	require.Error(t, w.Calibrate(500))
+	require.Equal(t, "refused", (*evs)[1].phase)
+	require.Contains(t, (*evs)[1].detail, "too little count change")
+}
+
+func TestNewToleratesCorruptStateFile(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "weight.toml")
+	require.NoError(t, os.WriteFile(path, []byte("offset_a = \"not a number\"\n"), 0o644))
+
+	var evs []eventRec
+	w := New(path, func(phase, detail string) { evs = append(evs, eventRec{phase, detail}) }, Options{})
+	w.Observe(allOK([3]int32{1000, 2000, 3000}))
+	require.False(t, reading(t, w.State(), NameCellAG).Ok, "grams stay N/A without a calibration")
+	// The dropped file must not read as a tare either.
+	require.Error(t, w.Calibrate(500))
+	require.Equal(t, "refused", evs[0].phase)
+	require.Contains(t, evs[0].detail, "tare first")
 }
 
 func TestMissThresholdLatchesNotOK(t *testing.T) {

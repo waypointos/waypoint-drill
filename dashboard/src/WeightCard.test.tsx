@@ -1,9 +1,9 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { act, fireEvent, render, screen } from '@testing-library/react';
 import { BridgeProvider } from './bridge';
 import { WeightCard } from './drill/WeightCard';
-import { DrillCommand, SensorReading, SensorReadings } from './proto/drill_pb';
-import { cmdSubject, sensorStateSubject } from './commands';
+import { CalibrationEvent, DrillCommand, SensorReading, SensorReadings } from './proto/drill_pb';
+import { calibrationSubject, cmdSubject, sensorStateSubject } from './commands';
 
 function setup() {
   const publish = vi.fn();
@@ -17,13 +17,21 @@ function setup() {
       <WeightCard />
     </BridgeProvider>,
   );
-  const send = (bytes: Uint8Array) => {
-    const fn = deliver.get(sensorStateSubject('r1'));
-    if (!fn) throw new Error('no subscriber for sensor.state');
+  const sendTo = (subject: string, bytes: Uint8Array) => {
+    const fn = deliver.get(subject);
+    if (!fn) throw new Error(`no subscriber for ${subject}`);
     act(() => fn(bytes));
   };
-  return { publish, send };
+  return {
+    publish,
+    send: (bytes: Uint8Array) => sendTo(sensorStateSubject('r1'), bytes),
+    sendCal: (ev: CalibrationEvent) => sendTo(calibrationSubject('r1'), ev.toBinary()),
+  };
 }
+
+afterEach(() => {
+  vi.useRealTimers();
+});
 
 /** A null value is a not-ok reading, the wire shape for N/A. */
 function readings(entries: Array<[string, number | null, string]>): Uint8Array {
@@ -70,6 +78,44 @@ describe('WeightCard', () => {
     expect(screen.getByTestId('weight-total')).toHaveTextContent('N/A');
     expect(screen.getByTestId('weight-cell_a_g')).toHaveTextContent('N/A');
     expect(screen.getByTestId('weight-cell_b_g')).toHaveTextContent('125.0 g');
+  });
+
+  it('goes N/A when sensor.state stops arriving', () => {
+    vi.useFakeTimers();
+    const { send } = setup();
+    send(readings([
+      ['cell_a_g', 125, 'g'], ['cell_b_g', 125, 'g'], ['cell_c_g', 250, 'g'],
+      ['total_g', 500, 'g'],
+      ['cell_a_raw', 2000, 'counts'], ['cell_b_raw', 3000, 'counts'], ['cell_c_raw', 5000, 'counts'],
+    ]));
+    expect(screen.getByTestId('weight-total')).toHaveTextContent('500.0 g');
+
+    act(() => void vi.advanceTimersByTime(3_000));
+
+    expect(screen.getByTestId('weight-total')).toHaveTextContent('N/A');
+    expect(screen.getByTestId('weight-total')).toHaveTextContent('sensor feed stale');
+    expect(screen.getByTestId('weight-cell_a_g')).toHaveTextContent('sensor feed stale');
+  });
+
+  it('notes the weight phases from the shared calibration leaf', () => {
+    const { sendCal } = setup();
+    sendCal(new CalibrationEvent({ phase: 'tared' }));
+    expect(screen.getByTestId('weight-note')).toHaveTextContent('tared');
+
+    sendCal(new CalibrationEvent({ phase: 'refused', detail: 'tare: a load cell is not reading' }));
+    expect(screen.getByTestId('weight-note')).toHaveTextContent('a load cell is not reading');
+  });
+
+  it('ignores the lift events on the shared calibration leaf', () => {
+    const { sendCal } = setup();
+    sendCal(new CalibrationEvent({ phase: 'top_set', travelTicks: 4200n }));
+    expect(screen.queryByTestId('weight-note')).not.toBeInTheDocument();
+
+    sendCal(new CalibrationEvent({
+      phase: 'refused',
+      detail: 'set_bottom: bottom is not below the top anchor',
+    }));
+    expect(screen.queryByTestId('weight-note')).not.toBeInTheDocument();
   });
 
   it('publishes a tare on the drill cmd leaf', () => {

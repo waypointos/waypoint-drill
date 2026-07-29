@@ -1,6 +1,7 @@
 package hx711
 
 import (
+	"errors"
 	"testing"
 	"time"
 
@@ -41,6 +42,43 @@ func (f *fakePort) ReadData() ([3]int, error) {
 	}
 	f.bit++
 	return out, nil
+}
+
+// partialPort reports two chips ready and one still converting, forever.
+type partialPort struct{ pulses int }
+
+func (p *partialPort) SetClock(v int) error {
+	if v == 1 {
+		p.pulses++
+	}
+	return nil
+}
+
+func (p *partialPort) ReadData() ([3]int, error) { return [3]int{0, 1, 0}, nil }
+
+// failingPort goes ready immediately, then fails once clocking starts.
+type failingPort struct {
+	clock    int
+	clockErr error
+	dataErr  error
+}
+
+func (f *failingPort) SetClock(v int) error {
+	if v == 1 && f.clockErr != nil {
+		return f.clockErr
+	}
+	f.clock = v
+	return nil
+}
+
+func (f *failingPort) ReadData() ([3]int, error) {
+	if f.clock == 0 {
+		return [3]int{0, 0, 0}, nil // ready
+	}
+	if f.dataErr != nil {
+		return [3]int{}, f.dataErr
+	}
+	return [3]int{1, 0, 1}, nil
 }
 
 // fakeNow yields a scripted monotonic clock: each call returns the next value.
@@ -96,12 +134,37 @@ func TestReadCycle_InvalidFrameNotOK(t *testing.T) {
 	require.False(t, s.OK[2], "stuck-high frame")
 }
 
+func TestReadCycle_PartialReadyIsNotClocked(t *testing.T) {
+	p := &partialPort{}
+	r := NewReader(p, Options{ReadyTimeout: 5 * time.Millisecond, Now: fakeNow(time.Millisecond)})
+	s := r.ReadCycle()
+	require.Equal(t, [3]bool{false, false, false}, s.OK)
+	require.Zero(t, p.pulses, "the shared clock must stay idle while a chip converts")
+}
+
+func TestReadCycle_PortErrorsYieldNotOK(t *testing.T) {
+	ports := map[string]*failingPort{
+		"clock write fails": {clockErr: errors.New("gpio lines gone")},
+		"data read fails":   {dataErr: errors.New("gpio lines gone")},
+	}
+	for name, p := range ports {
+		t.Run(name, func(t *testing.T) {
+			r := NewReader(p, Options{
+				SettleAfterJitter: time.Microsecond,
+				Now:               fakeNow(time.Microsecond),
+			})
+			require.Equal(t, [3]bool{false, false, false}, r.ReadCycle().OK)
+		})
+	}
+}
+
 func TestReadCycle_JitterDiscardsAndRetries(t *testing.T) {
 	// 60us per now() call makes every SCK-high measure over the 50us guard, so
-	// both attempts of the cycle are discarded.
+	// both attempts of the cycle are discarded. The settle is set small rather
+	// than zero, which NewReader would read as "use the 500ms default".
 	p := &fakePort{frames: [3]uint32{0x000100, 0x000100, 0x000100}, ready: true}
 	r := NewReader(p, Options{
-		SettleAfterJitter: 0,
+		SettleAfterJitter: time.Microsecond,
 		Now:               fakeNow(60 * time.Microsecond),
 	})
 	s := r.ReadCycle()
