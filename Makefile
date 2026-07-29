@@ -8,6 +8,7 @@ dev:
 	WAYPOINT_MODULE_ID=drill \
 	WAYPOINT_MODULE_COMPONENT=drill \
 	WAYPOINT_MODULE_STATE_RATE_HZ=20 \
+	WAYPOINT_MODULE_STATE_RATE_HZ_SENSOR=10 \
 	go run ./cmd/waypoint-module-drill
 
 raw:

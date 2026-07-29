@@ -35,6 +35,11 @@ func TestLoad_MissingFileReturnsDefaults(t *testing.T) {
 		AugerOvercurrentRaw: 500,
 		ReadGapHalt:         250 * time.Millisecond,
 		StaleInput:          150 * time.Millisecond,
+		SckGPIO:             5,
+		DoutAGPIO:           6,
+		DoutBGPIO:           13,
+		DoutCGPIO:           26,
+		WeightStatePath:     "/var/lib/waypoint-module-drill/weight.toml",
 	}, cfg)
 	require.Nil(t, cfg.MmPerTick)
 }
@@ -144,6 +149,32 @@ func TestLoad_MalformedTomlErrors(t *testing.T) {
 	cfg, err := Load(writeConfig(t, "jog_speed = "))
 	require.Error(t, err)
 	require.Nil(t, cfg)
+}
+
+func TestLoad_WeightDefaults(t *testing.T) {
+	cfg, err := Load(filepath.Join(t.TempDir(), "absent.toml"))
+	require.NoError(t, err)
+	require.Equal(t, 5, cfg.SckGPIO)
+	require.Equal(t, 6, cfg.DoutAGPIO)
+	require.Equal(t, 13, cfg.DoutBGPIO)
+	require.Equal(t, 26, cfg.DoutCGPIO)
+	require.Equal(t, "/var/lib/waypoint-module-drill/weight.toml", cfg.WeightStatePath)
+}
+
+func TestLoad_WeightOverrides(t *testing.T) {
+	cfg, err := Load(writeConfig(t, `
+sck_gpio = 17
+dout_a_gpio = 27
+dout_b_gpio = 22
+dout_c_gpio = 23
+weight_state_path = "/tmp/w.toml"
+`))
+	require.NoError(t, err)
+	require.Equal(t, 17, cfg.SckGPIO)
+	require.Equal(t, 27, cfg.DoutAGPIO)
+	require.Equal(t, 22, cfg.DoutBGPIO)
+	require.Equal(t, 23, cfg.DoutCGPIO)
+	require.Equal(t, "/tmp/w.toml", cfg.WeightStatePath)
 }
 
 func TestSwitchSign_Matrix(t *testing.T) {

@@ -6,9 +6,13 @@ language    = "go"
 entrypoint  = "waypoint-module-drill"
 requires    = ["servo-control", "teleop-input"]
 
-[component]
+[[components]]
 class = "drill"
 state_rate_hz = 20
+
+[[components]]
+class = "sensor"
+state_rate_hz = 10
 
 # drill.state / drill.cmd come from the generic class auto-grant; the servo
 # leaves are the agent's servo-control broker bridge.
@@ -24,7 +28,11 @@ subscribe = [
 ]
 
 [hardware]
-read_write = ["/var/lib/waypoint-module-drill"]
+# Both Pi 5 header chip numbers seen across kernel versions; the daemon
+# selects by label (pinctrl-rp1) at runtime.
+devices      = ["/dev/gpiochip0", "/dev/gpiochip4"]
+read_write   = ["/var/lib/waypoint-module-drill"]
+capabilities = ["SYS_NICE"]
 
 [health]
 probe      = "ready"
@@ -40,3 +48,27 @@ window_id = "w-drill"
 label     = "Drill"
 entry     = "teleop.js"
 bindings  = ["dpad"]
+
+[[config.fields]]
+key     = "sck_gpio"
+label   = "HX711 SCK GPIO"
+type    = "number"
+default = "5"
+
+[[config.fields]]
+key     = "dout_a_gpio"
+label   = "HX711 DOUT A GPIO"
+type    = "number"
+default = "6"
+
+[[config.fields]]
+key     = "dout_b_gpio"
+label   = "HX711 DOUT B GPIO"
+type    = "number"
+default = "13"
+
+[[config.fields]]
+key     = "dout_c_gpio"
+label   = "HX711 DOUT C GPIO"
+type    = "number"
+default = "26"

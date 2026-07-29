@@ -5,6 +5,7 @@ import (
 	"flag"
 	"log/slog"
 	"os"
+	"runtime"
 	"sync"
 	"time"
 
@@ -18,11 +19,13 @@ import (
 	"github.com/waypointos/waypoint-drill/internal/auger"
 	"github.com/waypointos/waypoint-drill/internal/config"
 	"github.com/waypointos/waypoint-drill/internal/control"
+	"github.com/waypointos/waypoint-drill/internal/hx711"
 	"github.com/waypointos/waypoint-drill/internal/lift"
 	"github.com/waypointos/waypoint-drill/internal/servobus"
 	"github.com/waypointos/waypoint-drill/internal/state"
 	"github.com/waypointos/waypoint-drill/internal/store"
 	"github.com/waypointos/waypoint-drill/internal/teleop"
+	"github.com/waypointos/waypoint-drill/internal/weight"
 	drillv1 "github.com/waypointos/waypoint-drill/protocol/gen/go"
 )
 
@@ -143,6 +146,26 @@ func setup(m *wpmodule.M, configPath string) (<-chan struct{}, error) {
 		}
 	}
 
+	w := weight.New(cfg.WeightStatePath, func(phase, detail string) {
+		events(phase, nil, detail)
+	}, weight.Options{})
+
+	port, closePort, portErr := hx711.OpenPort(hx711.ChipLabel, cfg.SckGPIO, cfg.DoutAGPIO, cfg.DoutBGPIO, cfg.DoutCGPIO)
+	if portErr != nil {
+		// Weight goes N/A but the drill still runs; sensing never blocks motion.
+		slog.Warn("load cell port unavailable", "err", portErr)
+	} else {
+		go weightLoop(m, hx711.NewReader(port, hx711.Options{}), w)
+		go func() {
+			<-m.Done()
+			_ = closePort()
+		}()
+	}
+
+	if _, err := m.ServeSensor(w); err != nil {
+		return nil, err
+	}
+
 	loop := control.NewLoop(cfg, sv, axis, auger.NewInterlock(cfg.TopBandFraction), events)
 
 	// The agent names the open component class in the unit drop-in; its leaves
@@ -157,7 +180,7 @@ func setup(m *wpmodule.M, configPath string) (<-chan struct{}, error) {
 		if proto.Unmarshal(msg.Data, &cmd) != nil {
 			return
 		}
-		loop.Command(&cmd, time.Now())
+		routeCommand(&cmd, loop, w, time.Now())
 	}); err != nil {
 		return nil, err
 	}
@@ -313,4 +336,45 @@ func applyOvercurrentCeilings(m *wpmodule.M, sv *servobus.Adapter, cfg *config.C
 		}
 	}
 	slog.Warn("overcurrent ceilings skipped: bus not reachable at startup")
+}
+
+type motionCommander interface {
+	Command(*drillv1.DrillCommand, time.Time)
+}
+
+type weigher interface {
+	Tare() error
+	Calibrate(float64) error
+}
+
+// routeCommand splits the weight actions off the motion loop; refusal
+// reporting happens inside the weight package via calibration events.
+func routeCommand(cmd *drillv1.DrillCommand, motion motionCommander, w weigher, at time.Time) {
+	switch a := cmd.GetAction().(type) {
+	case *drillv1.DrillCommand_Tare:
+		if a.Tare {
+			_ = w.Tare()
+		}
+	case *drillv1.DrillCommand_CalibrateMassG:
+		_ = w.Calibrate(a.CalibrateMassG)
+	default:
+		motion.Command(cmd, at)
+	}
+}
+
+// weightLoop owns the HX711 read cadence. ReadCycle blocks on chip-ready, so
+// the loop naturally runs at the chips' 10SPS.
+func weightLoop(m *wpmodule.M, rd *hx711.Reader, w *weight.Weight) {
+	runtime.LockOSThread()
+	if err := hx711.ElevateFIFO(); err != nil {
+		slog.Warn("hx711 loop staying at normal priority", "err", err)
+	}
+	for {
+		select {
+		case <-m.Done():
+			return
+		default:
+		}
+		w.Observe(rd.ReadCycle())
+	}
 }
