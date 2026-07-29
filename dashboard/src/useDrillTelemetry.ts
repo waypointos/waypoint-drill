@@ -1,15 +1,16 @@
 // Live telemetry hooks for the drill tab and the teleop window.
 //
-// Three private module subjects feed the UI:
-//   drill.state  20 Hz DrillState, the sole render source
-//   stats        5 Hz DrillStats, raw per-servo registers for the MOTORS card
-//   calibration  CalibrationEvent progress notes for the HEIGHT card
+// Four private module subjects feed the UI:
+//   drill.state   20 Hz DrillState, the sole render source
+//   stats         5 Hz DrillStats, raw per-servo registers for the MOTORS card
+//   calibration   CalibrationEvent progress notes for the HEIGHT and WEIGHT cards
+//   sensor.state  10 Hz SensorReadings, the load cells for the WEIGHT card
 // Every decode is guarded: a frame that does not parse is dropped rather than
 // rendered, and absent optionals stay absent so the UI can say N/A with a reason.
 import { useEffect, useState } from 'react';
 import { useBridge } from './bridge';
-import { CalibrationEvent, DrillState, DrillStats } from './proto/drill_pb';
-import { calibrationSubject, stateSubject, statsSubject } from './commands';
+import { CalibrationEvent, DrillState, DrillStats, SensorReadings } from './proto/drill_pb';
+import { calibrationSubject, sensorStateSubject, stateSubject, statsSubject } from './commands';
 
 export function useDrillState(): { state: DrillState | null; lastAtMs: number | null } {
   const { roverId, subscribe } = useBridge();
@@ -53,6 +54,26 @@ export function useCalibration(): CalibrationEvent | null {
     });
   }, [roverId, subscribe]);
   return event;
+}
+
+export function useWeight(): { readings: SensorReadings | null; lastAtMs: number | null } {
+  const { roverId, subscribe } = useBridge();
+  const [readings, setReadings] = useState<SensorReadings | null>(null);
+  const [lastAtMs, setLastAtMs] = useState<number | null>(null);
+  useEffect(() => {
+    return subscribe(sensorStateSubject(roverId), (b) => {
+      let msg: SensorReadings;
+      try { msg = SensorReadings.fromBinary(b); } catch { return; }
+      setReadings(msg);
+      setLastAtMs(Date.now());
+    });
+  }, [roverId, subscribe]);
+  return { readings, lastAtMs };
+}
+
+/** Finds one named reading; null when absent so callers render N/A. */
+export function readingByName(rs: SensorReadings | null, name: string) {
+  return rs?.readings.find((r) => r.name === name) ?? null;
 }
 
 /** Shown wherever a value is absent because no frame has landed yet. */

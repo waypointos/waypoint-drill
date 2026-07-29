@@ -25,6 +25,12 @@ export function calibrationSubject(roverId: string): string {
   return drillSubject(roverId, 'calibration');
 }
 
+// The load cells are a second component on the same module, so their state
+// rides the sensor class leaf rather than drill.state.
+export function sensorStateSubject(roverId: string): string {
+  return drillSubject(roverId, 'sensor.state');
+}
+
 function encode(action: DrillCommand['action']): Uint8Array {
   return new DrillCommand({ action }).toBinary();
 }
@@ -57,4 +63,14 @@ export function setTopCmd(): Uint8Array {
 /** Records the travel span from the top anchor down to where the lift is standing. */
 export function setBottomCmd(): Uint8Array {
   return encode({ case: 'setBottom', value: true });
+}
+
+/** Captures the current load cell counts as the weight zero; refused while a cell is down. */
+export function tareCmd(): Uint8Array {
+  return encode({ case: 'tare', value: true });
+}
+
+/** Known mass resting on the plate; the daemon derives the shared scale from it. */
+export function calibrateMassCmd(grams: number): Uint8Array {
+  return encode({ case: 'calibrateMassG', value: grams });
 }
