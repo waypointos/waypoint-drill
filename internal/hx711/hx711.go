@@ -64,10 +64,7 @@ func NewReader(p Port, o Options) *Reader {
 // three, and validates each. One jitter-discarded attempt is retried after a
 // settle; a second discard yields an all-false sample.
 func (r *Reader) ReadCycle() Sample {
-	ready := r.waitReady()
-	if ready != [3]bool{true, true, true} {
-		// A partial ready set is not clocked: pulsing SCK mid-conversion on the
-		// shared line would corrupt the chips that were not ready.
+	if !r.waitReady() {
 		return Sample{}
 	}
 	for attempt := 0; attempt < 2; attempt++ {
@@ -89,22 +86,19 @@ func (r *Reader) ReadCycle() Sample {
 	return Sample{}
 }
 
-// waitReady polls DOUT until all three are low or the timeout lapses.
-func (r *Reader) waitReady() [3]bool {
+// waitReady polls DOUT until all three chips are ready (low) or the timeout
+// lapses. A partial ready set is never clocked: pulsing the shared SCK while a
+// chip is mid-conversion corrupts its frame, so one unready board takes the
+// whole cycle with it.
+func (r *Reader) waitReady() bool {
 	deadline := r.opts.Now() + r.opts.ReadyTimeout
 	for {
 		vals, err := r.p.ReadData()
 		if err == nil && vals == [3]int{0, 0, 0} {
-			return [3]bool{true, true, true}
+			return true
 		}
 		if r.opts.Now() >= deadline {
-			var out [3]bool
-			if err == nil {
-				for i, v := range vals {
-					out[i] = v == 0
-				}
-			}
-			return out
+			return false
 		}
 		time.Sleep(readyPollEvery)
 	}
@@ -115,13 +109,16 @@ func (r *Reader) waitReady() [3]bool {
 func (r *Reader) clockFrame() (raws [3]uint32, clean bool) {
 	clean = true
 	for pulse := 0; pulse < pulsesPerFrame; pulse++ {
-		hi := r.opts.Now()
 		if r.p.SetClock(1) != nil {
 			return raws, false
 		}
+		// Bracket the high phase only: the surrounding SetClock ioctls are not
+		// part of it, and counting them would trip the guard on their own.
+		hi := r.opts.Now()
 		vals, err := r.p.ReadData()
+		high := r.opts.Now() - hi
 		lowErr := r.p.SetClock(0)
-		if r.opts.Now()-hi > r.opts.MaxHigh {
+		if high > r.opts.MaxHigh {
 			clean = false
 		}
 		if err != nil || lowErr != nil {

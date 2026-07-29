@@ -38,8 +38,10 @@ func OpenPort(chipLabel string, sck, dA, dB, dC int) (Port, func() error, error)
 	if err != nil {
 		return nil, nil, fmt.Errorf("request sck gpio %d: %w", sck, err)
 	}
+	// Pull the data lines up: a missing or unpowered board then reads high, which
+	// is "never ready", instead of floating and clocking out a fabricated frame.
 	doutLines, err := gpiocdev.RequestLines(name, []int{dA, dB, dC},
-		gpiocdev.AsInput, gpiocdev.WithConsumer("waypoint-drill-hx711"))
+		gpiocdev.AsInput, gpiocdev.WithPullUp, gpiocdev.WithConsumer("waypoint-drill-hx711"))
 	if err != nil {
 		_ = sckLine.Close()
 		return nil, nil, fmt.Errorf("request dout gpios %d/%d/%d: %w", dA, dB, dC, err)
