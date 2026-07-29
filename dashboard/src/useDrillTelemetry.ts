@@ -4,7 +4,7 @@
 //   drill.state   20 Hz DrillState, the sole render source
 //   stats         5 Hz DrillStats, raw per-servo registers for the MOTORS card
 //   calibration   CalibrationEvent progress notes for the HEIGHT and WEIGHT cards
-//   sensor.state  10 Hz SensorReadings, the load cells for the WEIGHT card
+//   sensor.state  SensorReadings at the module's state rate, the load cells
 // Every decode is guarded: a frame that does not parse is dropped rather than
 // rendered, and absent optionals stay absent so the UI can say N/A with a reason.
 import { useEffect, useState } from 'react';
@@ -54,6 +54,25 @@ export function useCalibration(): CalibrationEvent | null {
     });
   }, [roverId, subscribe]);
   return event;
+}
+
+// The lift's end marks and the weight tare/calibrate share one calibration
+// leaf, so each card has to ignore the other's events. The phase names split
+// them everywhere except "refused", where the daemon's action prefix does.
+const WEIGHT_REFUSAL = /^(tare|calibrate):/;
+
+/** True for the weight side of the shared calibration leaf. */
+export function isWeightCal(cal: CalibrationEvent | null): cal is CalibrationEvent {
+  if (cal === null) return false;
+  if (cal.phase === 'tared' || cal.phase === 'calibrated') return true;
+  return cal.phase === 'refused' && WEIGHT_REFUSAL.test(cal.detail);
+}
+
+/** True for the lift side of the shared calibration leaf. */
+export function isLiftCal(cal: CalibrationEvent | null): cal is CalibrationEvent {
+  if (cal === null) return false;
+  if (cal.phase === 'top_set' || cal.phase === 'bottom_set') return true;
+  return cal.phase === 'refused' && !WEIGHT_REFUSAL.test(cal.detail);
 }
 
 export function useWeight(): { readings: SensorReadings | null; lastAtMs: number | null } {
