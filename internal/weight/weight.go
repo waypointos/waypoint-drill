@@ -5,6 +5,8 @@ package weight
 import (
 	"errors"
 	"fmt"
+	"log/slog"
+	"math"
 	"sync"
 	"time"
 
@@ -31,6 +33,11 @@ var (
 const (
 	defaultMissThreshold = 5
 	defaultStaleAfter    = time.Second
+	// minCalDeltaCounts is the smallest summed count change a known mass may
+	// produce. A real mass moves thousands of counts; a handful of them means
+	// the mass is resting on the frame rather than the plate, and scaling to it
+	// would persist an absurd grams-per-count as a successful calibration.
+	minCalDeltaCounts = 100
 )
 
 type Options struct {
@@ -68,7 +75,13 @@ func New(statePath string, events func(phase, detail string), opts Options) *Wei
 		opts.Now = time.Now
 	}
 	w := &Weight{statePath: statePath, events: events, opts: opts}
-	if cal, ok, err := store.LoadWeight(statePath); err == nil && ok {
+	cal, ok, err := store.LoadWeight(statePath)
+	switch {
+	case err != nil:
+		// A corrupt file drops the operator's calibration; grams go N/A, so say
+		// why rather than leaving it to be guessed from the card.
+		slog.Warn("weight calibration load failed", "path", statePath, "err", err)
+	case ok:
 		w.cal, w.tared = *cal, true
 	}
 	return w
@@ -98,13 +111,15 @@ func (w *Weight) Observe(s hx711.Sample) {
 // so a plain re-zero keeps grams meaningful.
 func (w *Weight) Tare() error {
 	w.mu.Lock()
-	defer w.mu.Unlock()
 	if !w.allGoodLocked() {
-		return w.refuseLocked("tare", "a load cell is not reading")
+		w.mu.Unlock()
+		return w.refuse("tare", "a load cell is not reading")
 	}
 	w.cal.OffsetA, w.cal.OffsetB, w.cal.OffsetC = int64(w.counts[0]), int64(w.counts[1]), int64(w.counts[2])
 	w.tared = true
-	w.persistLocked("tared", "")
+	cal := w.cal
+	w.mu.Unlock()
+	w.persist(cal, "tared", "")
 	return nil
 }
 
@@ -113,24 +128,29 @@ func (w *Weight) Tare() error {
 // anchored to the summed delta serves all three cells.
 func (w *Weight) Calibrate(massG float64) error {
 	w.mu.Lock()
-	defer w.mu.Unlock()
 	if !w.allGoodLocked() {
-		return w.refuseLocked("calibrate", "a load cell is not reading")
+		w.mu.Unlock()
+		return w.refuse("calibrate", "a load cell is not reading")
 	}
 	if !w.tared {
-		return w.refuseLocked("calibrate", "tare first, with the plate empty")
+		w.mu.Unlock()
+		return w.refuse("calibrate", "tare first, with the plate empty")
 	}
 	if massG <= 0 {
-		return w.refuseLocked("calibrate", "mass must be positive grams")
+		w.mu.Unlock()
+		return w.refuse("calibrate", "mass must be positive grams")
 	}
 	sum := float64(int64(w.counts[0])-w.cal.OffsetA) +
 		float64(int64(w.counts[1])-w.cal.OffsetB) +
 		float64(int64(w.counts[2])-w.cal.OffsetC)
-	if sum == 0 {
-		return w.refuseLocked("calibrate", "no count change since tare")
+	if math.Abs(sum) < minCalDeltaCounts {
+		w.mu.Unlock()
+		return w.refuse("calibrate", "too little count change since tare")
 	}
 	w.cal.GramsPerCount = massG / sum
-	w.persistLocked("calibrated", fmt.Sprintf("%.6g g/count", w.cal.GramsPerCount))
+	cal := w.cal
+	w.mu.Unlock()
+	w.persist(cal, "calibrated", fmt.Sprintf("%.6g g/count", cal.GramsPerCount))
 	return nil
 }
 
@@ -182,13 +202,15 @@ func (w *Weight) allGoodLocked() bool {
 	return !w.staleLocked() && w.good[0] && w.good[1] && w.good[2]
 }
 
-func (w *Weight) refuseLocked(what, why string) error {
+// refuse and persist both run off the mutex: the read loop runs at SCHED_FIFO
+// and takes it every cycle, so it must never wait on a file write or a publish.
+func (w *Weight) refuse(what, why string) error {
 	w.events("refused", what+": "+why)
 	return errors.New(why)
 }
 
-func (w *Weight) persistLocked(phase, detail string) {
-	if err := store.SaveWeight(w.statePath, w.cal); err != nil {
+func (w *Weight) persist(cal store.WeightCal, phase, detail string) {
+	if err := store.SaveWeight(w.statePath, cal); err != nil {
 		w.events(phase, "save failed: "+err.Error())
 		return
 	}
