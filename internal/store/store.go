@@ -1,4 +1,5 @@
-// Package store persists the drill's lift calibration across restarts.
+// Package store persists the drill's lift and load cell calibration across
+// restarts.
 package store
 
 import (
@@ -14,8 +15,46 @@ type Calibration struct {
 	TravelTicks int64 `toml:"travel_ticks"`
 }
 
+// WeightCal is the load cell zero and shared scale. GramsPerCount 0 means
+// tared but not yet scaled by a known mass.
+type WeightCal struct {
+	OffsetA       int64   `toml:"offset_a"`
+	OffsetB       int64   `toml:"offset_b"`
+	OffsetC       int64   `toml:"offset_c"`
+	GramsPerCount float64 `toml:"grams_per_count"`
+}
+
 // Save writes the calibration atomically to path, creating parent dirs.
 func Save(path string, c Calibration) error {
+	return writeTOML(path, c)
+}
+
+// Load reads the calibration; a missing file yields ok=false and no error.
+func Load(path string) (*Calibration, bool, error) {
+	var c Calibration
+	ok, err := readTOML(path, &c)
+	if !ok || err != nil {
+		return nil, false, err
+	}
+	return &c, true, nil
+}
+
+// SaveWeight writes the weight calibration atomically, creating parent dirs.
+func SaveWeight(path string, c WeightCal) error {
+	return writeTOML(path, c)
+}
+
+// LoadWeight reads the weight calibration; a missing file yields ok=false.
+func LoadWeight(path string) (*WeightCal, bool, error) {
+	var c WeightCal
+	ok, err := readTOML(path, &c)
+	if !ok || err != nil {
+		return nil, false, err
+	}
+	return &c, true, nil
+}
+
+func writeTOML(path string, v any) error {
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return err
 	}
@@ -24,7 +63,7 @@ func Save(path string, c Calibration) error {
 	if err != nil {
 		return err
 	}
-	if err := toml.NewEncoder(f).Encode(c); err != nil {
+	if err := toml.NewEncoder(f).Encode(v); err != nil {
 		f.Close()
 		return err
 	}
@@ -34,18 +73,16 @@ func Save(path string, c Calibration) error {
 	return os.Rename(tmp, path)
 }
 
-// Load reads the calibration; a missing file yields ok=false and no error.
-func Load(path string) (*Calibration, bool, error) {
+func readTOML(path string, v any) (bool, error) {
 	data, err := os.ReadFile(path)
 	if errors.Is(err, os.ErrNotExist) {
-		return nil, false, nil
+		return false, nil
 	}
 	if err != nil {
-		return nil, false, err
+		return false, err
 	}
-	var c Calibration
-	if _, err := toml.Decode(string(data), &c); err != nil {
-		return nil, false, err
+	if _, err := toml.Decode(string(data), v); err != nil {
+		return false, err
 	}
-	return &c, true, nil
+	return true, nil
 }
