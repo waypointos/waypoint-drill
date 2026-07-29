@@ -1,9 +1,11 @@
 # Load cell bring-up
 
 Hardware checklist for the three HX711 load cells under the drill plate.
-Software side: the module's `sensor` component publishes `sensor.state` at
-10 Hz, and the WEIGHT card in the drill tab shows per-cell grams, the
-total, and the calibration controls.
+Software side: the module publishes `sensor.state` on its own subtree and
+the WEIGHT card in the drill tab shows per-cell grams, the total, and the
+calibration controls. The leaf becomes a declared `sensor` component,
+with its own 10 Hz rate, once the agent parses more than one component
+per module.
 
 ## Wiring
 
@@ -33,9 +35,12 @@ the module logs it, weight stays N/A, and the drill still jogs.
 1. **Boards answer.** With the module running, open the drill tab. The
    WEIGHT total reads `N/A` with `uncalibrated · tare, then a known
    mass`, which means all three chips are clocking frames and only the
-   scale is missing. A cell whose
-   reason reads `cell not reading` never went ready: check that board's
-   power, ground, and DOUT line.
+   scale is missing. `cell not reading` on all three cells means one or
+   more boards never went ready: the chips share the clock line and a
+   partial ready set is never clocked, so one dead board blanks all
+   three. Check power, ground, and the DOUT line on every board, one at
+   a time. `sensor feed stale` instead means no frames are arriving at
+   all: look at the module rather than the wiring.
 2. **Tare.** With the drill at rest and nothing on the plate beyond the
    assembly itself, press Tare. The card reports `tared`. Grams stay
    N/A until a known mass sets the scale.
@@ -49,11 +54,13 @@ the module logs it, weight stays N/A, and the drill still jogs.
    swapped, swap their DOUT pins in module config rather than rewiring.
    The scale is shared, so a per-cell number is only its share of the
    total, not a calibrated corner load.
-5. **Episode spot check.** Start a recording from the teleop console, jog
-   the drill briefly, stop, then download the episode from the Episodes
-   panel and confirm the `module.drill.sensor.state` channel carries the
-   `cell_a_g` / `cell_b_g` / `cell_c_g`, `total_g`, and `cell_*_raw`
-   readings.
+5. **Episode spot check**, once the `sensor` class can be declared. The
+   recorder picks its module channels off the declared component class,
+   so weight reaches an episode only then. Start a recording from the
+   teleop console, jog the drill briefly, stop, then download the episode
+   from the Episodes panel and confirm the `module.drill.sensor.state`
+   channel carries the `cell_a_g` / `cell_b_g` / `cell_c_g`, `total_g`,
+   and `cell_*_raw` readings.
 
 ## Refusals
 
@@ -65,9 +72,10 @@ reason lands on the card:
 - `tare first, with the plate empty`: a scale needs a zero to measure
   from.
 - `mass must be positive grams`: the entered mass was zero or negative.
-- `no count change since tare`: the plate saw no load between the tare
-  and the calibrate, so no scale can be derived. Check the mass is
-  actually resting on the plate.
+- `too little count change since tare`: the plate saw next to no load
+  between the tare and the calibrate, so any scale derived from it would
+  be nonsense. Check the mass is actually resting on the plate and not
+  on the frame around it.
 
 Offsets and scale persist in `weight_state_path`
 (`/var/lib/waypoint-module-drill/weight.toml` by default), so a restart
