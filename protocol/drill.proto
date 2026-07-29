@@ -60,6 +60,8 @@ message DrillCommand {
     bool       stop        = 4;  // halt latch: zero-write both, torque off, refuse motion until fresh input
     bool       set_top     = 7;  // anchor the current position as top of travel, height 0
     bool       set_bottom  = 8;  // record the current position as bottom; travel = ticks below the top anchor
+    bool   tare             = 9;   // capture current counts as the weight zero; refused while any cell is not ok
+    double calibrate_mass_g = 10;  // known mass on the plate, operator-entered grams; requires a prior tare
   }
 }
 message JogLift    { double velocity_norm = 1; }  // -1..1, + is up
@@ -89,7 +91,28 @@ message DrillStats {
 // ---- backend -> tab: outcome of one set_top / set_bottom mark ----
 message CalibrationEvent {
   google.protobuf.Timestamp t = 1;
-  string phase = 2;  // "top_set" | "bottom_set" | "refused"
+  string phase = 2;  // "top_set" | "bottom_set" | "tared" | "calibrated" | "refused"
   optional int64 travel_ticks = 3;  // present on "bottom_set"
   string detail = 4;                // refusal reason, "" otherwise
+}
+
+// ---- wire-compatible mirrors of waypoint.v1 sensor messages ----
+// The agent records module.drill.sensor.state as waypoint.v1.SensorReadings;
+// the tab decodes the same bytes with these mirrors.
+message Stamp {
+  google.protobuf.Timestamp t = 1;
+  uint64 mono_ns = 2;
+  string boot_id = 3;
+}
+
+message SensorReadings {
+  Stamp stamp = 1;
+  repeated SensorReading readings = 2;
+}
+
+message SensorReading {
+  string name = 1;
+  optional double value = 2;
+  string unit = 3;
+  bool ok = 4;
 }

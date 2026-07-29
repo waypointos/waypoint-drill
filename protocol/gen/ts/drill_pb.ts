@@ -4,7 +4,7 @@
 // @ts-nocheck
 
 import type { BinaryReadOptions, FieldList, JsonReadOptions, JsonValue, PartialMessage, PlainMessage } from "@bufbuild/protobuf";
-import { Message, proto3, Timestamp } from "@bufbuild/protobuf";
+import { Message, proto3, protoInt64, Timestamp } from "@bufbuild/protobuf";
 
 /**
  * @generated from enum waypoint.module.drill.v1.AugerDirection
@@ -270,6 +270,22 @@ export class DrillCommand extends Message<DrillCommand> {
      */
     value: boolean;
     case: "setBottom";
+  } | {
+    /**
+     * capture current counts as the weight zero; refused while any cell is not ok
+     *
+     * @generated from field: bool tare = 9;
+     */
+    value: boolean;
+    case: "tare";
+  } | {
+    /**
+     * known mass on the plate, operator-entered grams; requires a prior tare
+     *
+     * @generated from field: double calibrate_mass_g = 10;
+     */
+    value: number;
+    case: "calibrateMassG";
   } | { case: undefined; value?: undefined } = { case: undefined };
 
   constructor(data?: PartialMessage<DrillCommand>) {
@@ -286,6 +302,8 @@ export class DrillCommand extends Message<DrillCommand> {
     { no: 4, name: "stop", kind: "scalar", T: 8 /* ScalarType.BOOL */, oneof: "action" },
     { no: 7, name: "set_top", kind: "scalar", T: 8 /* ScalarType.BOOL */, oneof: "action" },
     { no: 8, name: "set_bottom", kind: "scalar", T: 8 /* ScalarType.BOOL */, oneof: "action" },
+    { no: 9, name: "tare", kind: "scalar", T: 8 /* ScalarType.BOOL */, oneof: "action" },
+    { no: 10, name: "calibrate_mass_g", kind: "scalar", T: 1 /* ScalarType.DOUBLE */, oneof: "action" },
   ]);
 
   static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): DrillCommand {
@@ -568,7 +586,7 @@ export class CalibrationEvent extends Message<CalibrationEvent> {
   t?: Timestamp;
 
   /**
-   * "top_set" | "bottom_set" | "refused"
+   * "top_set" | "bottom_set" | "tared" | "calibrated" | "refused"
    *
    * @generated from field: string phase = 2;
    */
@@ -616,6 +634,157 @@ export class CalibrationEvent extends Message<CalibrationEvent> {
 
   static equals(a: CalibrationEvent | PlainMessage<CalibrationEvent> | undefined, b: CalibrationEvent | PlainMessage<CalibrationEvent> | undefined): boolean {
     return proto3.util.equals(CalibrationEvent, a, b);
+  }
+}
+
+/**
+ * ---- wire-compatible mirrors of waypoint.v1 sensor messages ----
+ * The agent records module.drill.sensor.state as waypoint.v1.SensorReadings;
+ * the tab decodes the same bytes with these mirrors.
+ *
+ * @generated from message waypoint.module.drill.v1.Stamp
+ */
+export class Stamp extends Message<Stamp> {
+  /**
+   * @generated from field: google.protobuf.Timestamp t = 1;
+   */
+  t?: Timestamp;
+
+  /**
+   * @generated from field: uint64 mono_ns = 2;
+   */
+  monoNs = protoInt64.zero;
+
+  /**
+   * @generated from field: string boot_id = 3;
+   */
+  bootId = "";
+
+  constructor(data?: PartialMessage<Stamp>) {
+    super();
+    proto3.util.initPartial(data, this);
+  }
+
+  static readonly runtime: typeof proto3 = proto3;
+  static readonly typeName = "waypoint.module.drill.v1.Stamp";
+  static readonly fields: FieldList = proto3.util.newFieldList(() => [
+    { no: 1, name: "t", kind: "message", T: Timestamp },
+    { no: 2, name: "mono_ns", kind: "scalar", T: 4 /* ScalarType.UINT64 */ },
+    { no: 3, name: "boot_id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+  ]);
+
+  static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): Stamp {
+    return new Stamp().fromBinary(bytes, options);
+  }
+
+  static fromJson(jsonValue: JsonValue, options?: Partial<JsonReadOptions>): Stamp {
+    return new Stamp().fromJson(jsonValue, options);
+  }
+
+  static fromJsonString(jsonString: string, options?: Partial<JsonReadOptions>): Stamp {
+    return new Stamp().fromJsonString(jsonString, options);
+  }
+
+  static equals(a: Stamp | PlainMessage<Stamp> | undefined, b: Stamp | PlainMessage<Stamp> | undefined): boolean {
+    return proto3.util.equals(Stamp, a, b);
+  }
+}
+
+/**
+ * @generated from message waypoint.module.drill.v1.SensorReadings
+ */
+export class SensorReadings extends Message<SensorReadings> {
+  /**
+   * @generated from field: waypoint.module.drill.v1.Stamp stamp = 1;
+   */
+  stamp?: Stamp;
+
+  /**
+   * @generated from field: repeated waypoint.module.drill.v1.SensorReading readings = 2;
+   */
+  readings: SensorReading[] = [];
+
+  constructor(data?: PartialMessage<SensorReadings>) {
+    super();
+    proto3.util.initPartial(data, this);
+  }
+
+  static readonly runtime: typeof proto3 = proto3;
+  static readonly typeName = "waypoint.module.drill.v1.SensorReadings";
+  static readonly fields: FieldList = proto3.util.newFieldList(() => [
+    { no: 1, name: "stamp", kind: "message", T: Stamp },
+    { no: 2, name: "readings", kind: "message", T: SensorReading, repeated: true },
+  ]);
+
+  static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): SensorReadings {
+    return new SensorReadings().fromBinary(bytes, options);
+  }
+
+  static fromJson(jsonValue: JsonValue, options?: Partial<JsonReadOptions>): SensorReadings {
+    return new SensorReadings().fromJson(jsonValue, options);
+  }
+
+  static fromJsonString(jsonString: string, options?: Partial<JsonReadOptions>): SensorReadings {
+    return new SensorReadings().fromJsonString(jsonString, options);
+  }
+
+  static equals(a: SensorReadings | PlainMessage<SensorReadings> | undefined, b: SensorReadings | PlainMessage<SensorReadings> | undefined): boolean {
+    return proto3.util.equals(SensorReadings, a, b);
+  }
+}
+
+/**
+ * @generated from message waypoint.module.drill.v1.SensorReading
+ */
+export class SensorReading extends Message<SensorReading> {
+  /**
+   * @generated from field: string name = 1;
+   */
+  name = "";
+
+  /**
+   * @generated from field: optional double value = 2;
+   */
+  value?: number;
+
+  /**
+   * @generated from field: string unit = 3;
+   */
+  unit = "";
+
+  /**
+   * @generated from field: bool ok = 4;
+   */
+  ok = false;
+
+  constructor(data?: PartialMessage<SensorReading>) {
+    super();
+    proto3.util.initPartial(data, this);
+  }
+
+  static readonly runtime: typeof proto3 = proto3;
+  static readonly typeName = "waypoint.module.drill.v1.SensorReading";
+  static readonly fields: FieldList = proto3.util.newFieldList(() => [
+    { no: 1, name: "name", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 2, name: "value", kind: "scalar", T: 1 /* ScalarType.DOUBLE */, opt: true },
+    { no: 3, name: "unit", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 4, name: "ok", kind: "scalar", T: 8 /* ScalarType.BOOL */ },
+  ]);
+
+  static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): SensorReading {
+    return new SensorReading().fromBinary(bytes, options);
+  }
+
+  static fromJson(jsonValue: JsonValue, options?: Partial<JsonReadOptions>): SensorReading {
+    return new SensorReading().fromJson(jsonValue, options);
+  }
+
+  static fromJsonString(jsonString: string, options?: Partial<JsonReadOptions>): SensorReading {
+    return new SensorReading().fromJsonString(jsonString, options);
+  }
+
+  static equals(a: SensorReading | PlainMessage<SensorReading> | undefined, b: SensorReading | PlainMessage<SensorReading> | undefined): boolean {
+    return proto3.util.equals(SensorReading, a, b);
   }
 }
 
