@@ -6,13 +6,13 @@ language    = "go"
 entrypoint  = "waypoint-module-drill"
 requires    = ["servo-control", "teleop-input"]
 
-[[components]]
+# One open component until the agent parses multiple: an unknown manifest key is
+# ignored, so declaring [[components]] here would silently drop the drill class
+# and take the whole tab down with it. The sensor leaf is granted explicitly
+# below and rides this rate until the sensor class can be declared.
+[component]
 class = "drill"
 state_rate_hz = 20
-
-[[components]]
-class = "sensor"
-state_rate_hz = 10
 
 # drill.state / drill.cmd come from the generic class auto-grant; the servo
 # leaves are the agent's servo-control broker bridge.
@@ -22,6 +22,7 @@ publish = [
   "waypoint.*.module.drill.servo.read",
   "waypoint.*.module.drill.stats",
   "waypoint.*.module.drill.calibration",
+  "waypoint.*.module.drill.sensor.state",
 ]
 subscribe = [
   "waypoint.*.module.drill.health.ready",
