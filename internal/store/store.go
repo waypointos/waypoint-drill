@@ -24,6 +24,16 @@ type WeightCal struct {
 	GramsPerCount float64 `toml:"grams_per_count"`
 }
 
+// LoadEstCal is the servo-derived load estimate's free-air baselines, in
+// N-mm of smoothed servo torque. Set flags distinguish "captured at zero"
+// from "never captured".
+type LoadEstCal struct {
+	LiftBaselineNmm  float64 `toml:"lift_baseline_nmm"`
+	LiftBaselineSet  bool    `toml:"lift_baseline_set"`
+	AugerBaselineNmm float64 `toml:"auger_baseline_nmm"`
+	AugerBaselineSet bool    `toml:"auger_baseline_set"`
+}
+
 // Save writes the calibration atomically to path, creating parent dirs.
 func Save(path string, c Calibration) error {
 	return writeTOML(path, c)
@@ -47,6 +57,21 @@ func SaveWeight(path string, c WeightCal) error {
 // LoadWeight reads the weight calibration; a missing file yields ok=false.
 func LoadWeight(path string) (*WeightCal, bool, error) {
 	var c WeightCal
+	ok, err := readTOML(path, &c)
+	if !ok || err != nil {
+		return nil, false, err
+	}
+	return &c, true, nil
+}
+
+// SaveLoadEst writes the estimate baselines atomically, creating parent dirs.
+func SaveLoadEst(path string, c LoadEstCal) error {
+	return writeTOML(path, c)
+}
+
+// LoadLoadEst reads the estimate baselines; a missing file yields ok=false.
+func LoadLoadEst(path string) (*LoadEstCal, bool, error) {
+	var c LoadEstCal
 	ok, err := readTOML(path, &c)
 	if !ok || err != nil {
 		return nil, false, err
