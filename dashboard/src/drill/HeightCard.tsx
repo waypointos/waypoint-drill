@@ -9,7 +9,7 @@ import { useState } from 'react';
 import { useBridge } from '../bridge';
 import { cmdSubject, gotoHeightCmd, jogLiftCmd, setBottomCmd, setTopCmd } from '../commands';
 import type { CalibrationEvent, DrillState } from '../proto/drill_pb';
-import type { HeightReadout } from '../useDrillTelemetry';
+import { isLiftCal, type HeightReadout } from '../useDrillTelemetry';
 import { Panel } from '../ui/Panel';
 import { HoldButton } from './HoldButton';
 import styles from './HeightCard.module.css';
@@ -132,7 +132,8 @@ export function HeightCard({ state, height, cal, halted }: {
         ) : null}
       </div>
 
-      {cal ? (
+      {/* The weight card owns the tare/calibrate events on the shared leaf. */}
+      {isLiftCal(cal) ? (
         <p className={styles.calNote} data-testid="cal-note">{calNote(cal)}</p>
       ) : null}
     </Panel>

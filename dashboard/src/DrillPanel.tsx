@@ -1,7 +1,7 @@
 // The drill tab ([ui.static] surface). Cards in the host dashboard's language:
 // a 1fr/320px split with the live render and the controls in the centre column
 // and a STATUS rail on the right.
-//   center -> DRILL hero (render + readout strip), HEIGHT, AUGER, MOTORS
+//   center -> DRILL hero (render + readout strip), HEIGHT, AUGER, MOTORS, WEIGHT, LOAD
 //   rail   -> STATUS (feed pill, homed, calibrated, halted, switch, phase)
 // Everything renders off the module's private subjects; an absent optional
 // shows N/A with the daemon's own reason rather than a fake zero.
@@ -10,7 +10,9 @@ import { AugerCard } from './drill/AugerCard';
 import type { DrillPose } from './drill/DrillViewport';
 import { HeightCard } from './drill/HeightCard';
 import { HeroCard } from './drill/HeroCard';
+import { LoadPlotCard } from './drill/LoadPlotCard';
 import { MotorsCard } from './drill/MotorsCard';
+import { WeightCard } from './drill/WeightCard';
 import { Panel } from './ui/Panel';
 import {
   AWAITING,
@@ -61,6 +63,8 @@ export function DrillPanel() {
         <HeightCard state={state} height={height} cal={cal} halted={halted} />
         <AugerCard state={state} halted={halted} />
         <MotorsCard stats={stats} />
+        <WeightCard />
+        <LoadPlotCard state={state} />
       </div>
 
       <aside className={styles.rail}>

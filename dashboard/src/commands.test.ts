@@ -1,15 +1,20 @@
 import { describe, expect, it } from 'vitest';
 import {
+  calibrateMassCmd,
   calibrationSubject,
+  captureAugerBaselineCmd,
+  captureLiftBaselineCmd,
   cmdSubject,
   gotoHeightCmd,
   jogLiftCmd,
   runAugerCmd,
+  sensorStateSubject,
   setBottomCmd,
   setTopCmd,
   stateSubject,
   statsSubject,
   stopCmd,
+  tareCmd,
 } from './commands';
 import { DrillCommand } from './proto/drill_pb';
 
@@ -26,6 +31,10 @@ describe('subject helpers', () => {
   it('leaves the module-owned leaves single', () => {
     expect(statsSubject('r1')).toBe('waypoint.r1.module.drill.stats');
     expect(calibrationSubject('r1')).toBe('waypoint.r1.module.drill.calibration');
+  });
+
+  it('targets the sensor component leaf for load cell readings', () => {
+    expect(sensorStateSubject('r1')).toBe('waypoint.r1.module.drill.sensor.state');
   });
 });
 
@@ -57,5 +66,21 @@ describe('command builders', () => {
     expect(action(stopCmd())).toEqual({ case: 'stop', value: true });
     expect(action(setTopCmd())).toEqual({ case: 'setTop', value: true });
     expect(action(setBottomCmd())).toEqual({ case: 'setBottom', value: true });
+  });
+
+  it('encodes tare as a true flag', () => {
+    expect(action(tareCmd())).toEqual({ case: 'tare', value: true });
+  });
+
+  it('encodes the known calibration mass in grams', () => {
+    expect(action(calibrateMassCmd(500))).toEqual({ case: 'calibrateMassG', value: 500 });
+  });
+
+  it('builds captureLiftBaseline', () => {
+    expect(action(captureLiftBaselineCmd())).toEqual({ case: 'captureLiftBaseline', value: true });
+  });
+
+  it('builds captureAugerBaseline', () => {
+    expect(action(captureAugerBaselineCmd())).toEqual({ case: 'captureAugerBaseline', value: true });
   });
 });

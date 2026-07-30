@@ -6,6 +6,10 @@ language    = "go"
 entrypoint  = "waypoint-module-drill"
 requires    = ["servo-control", "teleop-input"]
 
+# One open component until the agent parses multiple: an unknown manifest key is
+# ignored, so declaring [[components]] here would silently drop the drill class
+# and take the whole tab down with it. The sensor leaf is granted explicitly
+# below and rides this rate until the sensor class can be declared.
 [component]
 class = "drill"
 state_rate_hz = 20
@@ -18,13 +22,18 @@ publish = [
   "waypoint.*.module.drill.servo.read",
   "waypoint.*.module.drill.stats",
   "waypoint.*.module.drill.calibration",
+  "waypoint.*.module.drill.sensor.state",
 ]
 subscribe = [
   "waypoint.*.module.drill.health.ready",
 ]
 
 [hardware]
-read_write = ["/var/lib/waypoint-module-drill"]
+# Both Pi 5 header chip numbers seen across kernel versions; the daemon
+# selects by label (pinctrl-rp1) at runtime.
+devices      = ["/dev/gpiochip0", "/dev/gpiochip4"]
+read_write   = ["/var/lib/waypoint-module-drill"]
+capabilities = ["SYS_NICE"]
 
 [health]
 probe      = "ready"
@@ -40,3 +49,39 @@ window_id = "w-drill"
 label     = "Drill"
 entry     = "teleop.js"
 bindings  = ["dpad"]
+
+[[config.fields]]
+key     = "sck_gpio"
+label   = "HX711 SCK GPIO"
+type    = "number"
+default = "5"
+
+[[config.fields]]
+key     = "dout_a_gpio"
+label   = "HX711 DOUT A GPIO"
+type    = "number"
+default = "6"
+
+[[config.fields]]
+key     = "dout_b_gpio"
+label   = "HX711 DOUT B GPIO"
+type    = "number"
+default = "13"
+
+[[config.fields]]
+key     = "dout_c_gpio"
+label   = "HX711 DOUT C GPIO"
+type    = "number"
+default = "26"
+
+[[config.fields]]
+key     = "stall_torque_kgcm"
+label   = "Servo stall torque (kg-cm)"
+type    = "number"
+default = "30"
+
+[[config.fields]]
+key     = "pinion_radius_mm"
+label   = "Lift pinion pitch radius (mm)"
+type    = "number"
+default = "15.9"

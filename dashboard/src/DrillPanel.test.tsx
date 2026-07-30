@@ -8,9 +8,11 @@ const CMD = 'waypoint.r1.module.drill.drill.cmd';
 
 function setup() {
   const publish = vi.fn();
-  const deliver = new Map<string, (b: Uint8Array) => void>();
+  // One subject can have several subscribers: HEIGHT and WEIGHT both read the
+  // calibration leaf, and the bus fans a frame out to all of them.
+  const deliver = new Map<string, Array<(b: Uint8Array) => void>>();
   const subscribe = (subject: string, onBytes: (b: Uint8Array) => void) => {
-    deliver.set(subject, onBytes);
+    deliver.set(subject, [...(deliver.get(subject) ?? []), onBytes]);
     return () => {};
   };
   const view = render(
@@ -19,9 +21,9 @@ function setup() {
     </BridgeProvider>,
   );
   const send = (leaf: string, bytes: Uint8Array) => {
-    const fn = deliver.get(`waypoint.r1.module.drill.${leaf}`);
-    if (!fn) throw new Error(`no subscriber for ${leaf}`);
-    act(() => fn(bytes));
+    const fns = deliver.get(`waypoint.r1.module.drill.${leaf}`);
+    if (!fns?.length) throw new Error(`no subscriber for ${leaf}`);
+    act(() => fns.forEach((fn) => fn(bytes)));
   };
   return { publish, send, view };
 }
@@ -160,6 +162,20 @@ describe('DrillPanel', () => {
     expect(note).toHaveTextContent('refused');
     expect(note).toHaveTextContent('bottom is not below the top anchor');
     expect(note).toHaveTextContent('travel 4200 ticks');
+  });
+
+  it('keeps the weight events on the shared calibration leaf out of HEIGHT', () => {
+    const { send } = setup();
+    send('calibration', new CalibrationEvent({ phase: 'calibrated', detail: '0.125 g/count' }).toBinary());
+    expect(screen.queryByTestId('cal-note')).not.toBeInTheDocument();
+
+    send('calibration', new CalibrationEvent({
+      phase: 'refused',
+      detail: 'tare: a load cell is not reading',
+    }).toBinary());
+    expect(screen.queryByTestId('cal-note')).not.toBeInTheDocument();
+    // The WEIGHT card is the surface that reports them.
+    expect(screen.getByTestId('weight-note')).toHaveTextContent('a load cell is not reading');
   });
 
   it('renders one MOTORS row per servo off a DrillStats frame', () => {

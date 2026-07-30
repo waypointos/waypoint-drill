@@ -5,6 +5,7 @@ import (
 	"flag"
 	"log/slog"
 	"os"
+	"runtime"
 	"sync"
 	"time"
 
@@ -18,11 +19,14 @@ import (
 	"github.com/waypointos/waypoint-drill/internal/auger"
 	"github.com/waypointos/waypoint-drill/internal/config"
 	"github.com/waypointos/waypoint-drill/internal/control"
+	"github.com/waypointos/waypoint-drill/internal/hx711"
 	"github.com/waypointos/waypoint-drill/internal/lift"
+	"github.com/waypointos/waypoint-drill/internal/loadest"
 	"github.com/waypointos/waypoint-drill/internal/servobus"
 	"github.com/waypointos/waypoint-drill/internal/state"
 	"github.com/waypointos/waypoint-drill/internal/store"
 	"github.com/waypointos/waypoint-drill/internal/teleop"
+	"github.com/waypointos/waypoint-drill/internal/weight"
 	drillv1 "github.com/waypointos/waypoint-drill/protocol/gen/go"
 )
 
@@ -34,6 +38,8 @@ const (
 	startupBackoff  = 500 * time.Millisecond
 	// Bounded wait for the control loop's stop sequence at shutdown.
 	haltGrace = 2 * time.Second
+	// nmmPerKgcm converts the servo's kg-cm stall torque rating to N-mm.
+	nmmPerKgcm = 98.0665
 )
 
 func main() {
@@ -143,6 +149,35 @@ func setup(m *wpmodule.M, configPath string) (<-chan struct{}, error) {
 		}
 	}
 
+	w := weight.New(cfg.WeightStatePath, func(phase, detail string) {
+		events(phase, nil, detail)
+	}, weight.Options{})
+
+	est := loadest.New(cfg.LoadEstStatePath, func(phase, detail string) {
+		events(phase, nil, detail)
+	}, loadest.Config{
+		StallTorqueNmm: cfg.StallTorqueKgcm * nmmPerKgcm,
+		PinionRadiusMm: cfg.PinionRadiusMm,
+		LiftUpSign:     cfg.LiftUpSign,
+		AugerDrillSign: cfg.AugerDrillSign,
+	})
+
+	port, closePort, portErr := hx711.OpenPort(hx711.ChipLabel, cfg.SckGPIO, cfg.DoutAGPIO, cfg.DoutBGPIO, cfg.DoutCGPIO)
+	if portErr != nil {
+		// Weight goes N/A but the drill still runs; sensing never blocks motion.
+		slog.Warn("load cell port unavailable", "err", portErr)
+	} else {
+		go weightLoop(m, hx711.NewReader(port, hx711.Options{}), w)
+		go func() {
+			<-m.Done()
+			_ = closePort()
+		}()
+	}
+
+	if _, err := m.ServeSensor(sensorsWith(w, est)); err != nil {
+		return nil, err
+	}
+
 	loop := control.NewLoop(cfg, sv, axis, auger.NewInterlock(cfg.TopBandFraction), events)
 
 	// The agent names the open component class in the unit drop-in; its leaves
@@ -157,7 +192,7 @@ func setup(m *wpmodule.M, configPath string) (<-chan struct{}, error) {
 		if proto.Unmarshal(msg.Data, &cmd) != nil {
 			return
 		}
-		loop.Command(&cmd, time.Now())
+		routeCommand(&cmd, loop, w, est, time.Now())
 	}); err != nil {
 		return nil, err
 	}
@@ -170,7 +205,7 @@ func setup(m *wpmodule.M, configPath string) (<-chan struct{}, error) {
 
 	reads := &readCache{}
 	go applyOvercurrentCeilings(m, sv, cfg)
-	go readLoop(m, sv, cfg, axis, loop, reads, m.Subject(class+".state"))
+	go readLoop(m, sv, cfg, axis, loop, est, reads, m.Subject(class+".state"))
 	go statsLoop(m, reads, m.Subject("stats"))
 
 	halted := make(chan struct{})
@@ -209,6 +244,7 @@ func readLoop(
 	cfg *config.Config,
 	axis *lift.Axis,
 	loop *control.Loop,
+	est *loadest.Estimator,
 	reads *readCache,
 	stateSubject string,
 ) {
@@ -233,6 +269,8 @@ func readLoop(
 
 			loop.ObserveFaults(liftSt.GetOvercurrentTripped(), augerSt.GetOvercurrentTripped())
 			loop.Observe(obsFrom(liftSt, liftErr, now), obsFrom(augerSt, augerErr, now))
+			est.ObserveLift(liftSt.GetLoadRaw(), liftSt.GetSpeedRaw(), loadSpeedOK(liftSt, liftErr))
+			est.ObserveAuger(augerSt.GetLoadRaw(), augerSt.GetSpeedRaw(), loadSpeedOK(augerSt, augerErr))
 
 			if now.Before(nextPublish) {
 				continue
@@ -282,6 +320,13 @@ func obsFrom(st *drillv1.ServoState, err error, now time.Time) lift.Obs {
 	return o
 }
 
+// loadSpeedOK reports whether a read answered both registers the load estimate
+// needs. Absent fields read as a real zero downstream, so their absence fails
+// the read rather than feeding a fabricated sample in.
+func loadSpeedOK(st *drillv1.ServoState, err error) bool {
+	return err == nil && st.GetOk() && st.LoadRaw != nil && st.SpeedRaw != nil
+}
+
 // applyOvercurrentCeilings waits until the servo bus answers a read (core and
 // the servo broker are up), then writes each servo's overcurrent ceiling. A
 // configured 0 leaves the servo's existing limit alone.
@@ -313,4 +358,81 @@ func applyOvercurrentCeilings(m *wpmodule.M, sv *servobus.Adapter, cfg *config.C
 		}
 	}
 	slog.Warn("overcurrent ceilings skipped: bus not reachable at startup")
+}
+
+type motionCommander interface {
+	Command(*drillv1.DrillCommand, time.Time)
+}
+
+type weigher interface {
+	Tare() error
+	Calibrate(float64) error
+}
+
+type baseliner interface {
+	CaptureLiftBaseline() error
+	CaptureAugerBaseline() error
+}
+
+type readingsProvider interface {
+	Readings() []*waypointv1.SensorReading
+}
+
+type sensorState interface {
+	State() *waypointv1.SensorReadings
+}
+
+// sensorsWith appends the load estimate readings to the weight readings so both
+// rails ride the one sensor.state leaf.
+func sensorsWith(w sensorState, extra readingsProvider) wpmodule.SensorServer {
+	return sensorFunc(func() *waypointv1.SensorReadings {
+		st := w.State()
+		st.Readings = append(st.Readings, extra.Readings()...)
+		return st
+	})
+}
+
+type sensorFunc func() *waypointv1.SensorReadings
+
+func (f sensorFunc) State() *waypointv1.SensorReadings { return f() }
+
+// routeCommand splits the sensing actions off the motion loop; refusal
+// reporting happens inside the weight and loadest packages via calibration
+// events.
+func routeCommand(cmd *drillv1.DrillCommand, motion motionCommander, w weigher, est baseliner, at time.Time) {
+	switch a := cmd.GetAction().(type) {
+	case *drillv1.DrillCommand_Tare:
+		if a.Tare {
+			_ = w.Tare()
+		}
+	case *drillv1.DrillCommand_CalibrateMassG:
+		_ = w.Calibrate(a.CalibrateMassG)
+	case *drillv1.DrillCommand_CaptureLiftBaseline:
+		if a.CaptureLiftBaseline {
+			_ = est.CaptureLiftBaseline()
+		}
+	case *drillv1.DrillCommand_CaptureAugerBaseline:
+		if a.CaptureAugerBaseline {
+			_ = est.CaptureAugerBaseline()
+		}
+	default:
+		motion.Command(cmd, at)
+	}
+}
+
+// weightLoop owns the HX711 read cadence. ReadCycle blocks on chip-ready, so
+// the loop naturally runs at the chips' 10SPS.
+func weightLoop(m *wpmodule.M, rd *hx711.Reader, w *weight.Weight) {
+	runtime.LockOSThread()
+	if err := hx711.ElevateFIFO(); err != nil {
+		slog.Warn("hx711 loop staying at normal priority", "err", err)
+	}
+	for {
+		select {
+		case <-m.Done():
+			return
+		default:
+		}
+		w.Observe(rd.ReadCycle())
+	}
 }

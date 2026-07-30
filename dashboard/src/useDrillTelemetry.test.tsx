@@ -2,17 +2,23 @@ import { describe, expect, it, vi } from 'vitest';
 import { act, renderHook } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { BridgeProvider } from './bridge';
-import { calibrationSubject, stateSubject, statsSubject } from './commands';
+import { calibrationSubject, sensorStateSubject, stateSubject, statsSubject } from './commands';
 import {
+  isLiftCal,
+  isLoadEstCal,
+  isWeightCal,
   useAgeMs,
   useCalibration,
   useDrillState,
   useDrillStats,
+  useSensorHistory,
 } from './useDrillTelemetry';
 import {
   CalibrationEvent,
   DrillState,
   DrillStats,
+  SensorReading,
+  SensorReadings,
   ServoState,
 } from './proto/drill_pb';
 
@@ -136,6 +142,65 @@ describe('useCalibration', () => {
     feed(calibrationSubject('r1'), new CalibrationEvent({ phase: 'done', travelTicks: 4096n }).toBinary());
     expect(result.current?.phase).toBe('done');
     expect(result.current?.travelTicks).toBe(4096n);
+  });
+});
+
+/** A null value is a not-ok reading, the wire shape for N/A. */
+function readings(entries: Array<[string, number | null, string]>): Uint8Array {
+  return new SensorReadings({
+    readings: entries.map(([name, value, unit]) => new SensorReading({
+      name,
+      unit,
+      ok: value !== null,
+      value: value ?? undefined,
+    })),
+  }).toBinary();
+}
+
+describe('useSensorHistory', () => {
+  it('appends points, keeps N/A as null, and caps capacity', () => {
+    const { wrapper, feed } = harness();
+    const { result } = renderHook(() => useSensorHistory(['lift_force_est_g'], 3), { wrapper });
+    const send = (bytes: Uint8Array) => feed(sensorStateSubject('r1'), bytes);
+
+    send(readings([['lift_force_est_g', 100, 'g']]));
+    send(readings([['lift_force_est_g', null, 'g']]));
+    send(readings([['lift_force_est_g', 120, 'g']]));
+    send(readings([['lift_force_est_g', 130, 'g']]));
+
+    const pts = result.current;
+    expect(pts).toHaveLength(3); // capacity evicts the oldest
+    expect(pts[0].values['lift_force_est_g']).toBeNull(); // N/A stays null
+    expect(pts[2].values['lift_force_est_g']).toBe(130);
+  });
+
+  it('drops a malformed frame and keeps the history', () => {
+    const { wrapper, feed } = harness();
+    const { result } = renderHook(() => useSensorHistory(['total_g']), { wrapper });
+    feed(sensorStateSubject('r1'), readings([['total_g', 500, 'g']]));
+    feed(sensorStateSubject('r1'), new Uint8Array([0xff, 0xff, 0xff]));
+    expect(result.current).toHaveLength(1);
+    expect(result.current[0].values['total_g']).toBe(500);
+  });
+});
+
+describe('isLoadEstCal', () => {
+  it('claims baseline phases and their refusals, and isLiftCal ignores them', () => {
+    const set = new CalibrationEvent({ phase: 'lift_baseline_set', detail: '12.0 nmm' });
+    const refused = new CalibrationEvent({
+      phase: 'refused',
+      detail: 'auger baseline: spin the auger in the drilling direction in free air first',
+    });
+    expect(isLoadEstCal(set)).toBe(true);
+    expect(isLoadEstCal(refused)).toBe(true);
+    expect(isLiftCal(refused)).toBe(false);
+    expect(isWeightCal(refused)).toBe(false);
+  });
+
+  it('leaves the lift and weight phases to their own cards', () => {
+    expect(isLoadEstCal(new CalibrationEvent({ phase: 'top_set' }))).toBe(false);
+    expect(isLoadEstCal(new CalibrationEvent({ phase: 'tared' }))).toBe(false);
+    expect(isLoadEstCal(null)).toBe(false);
   });
 });
 

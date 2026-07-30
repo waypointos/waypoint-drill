@@ -40,6 +40,20 @@ type Config struct {
 
 	ReadGapHalt time.Duration
 	StaleInput  time.Duration
+
+	// HX711 load cell wiring; header GPIOs, changeable without a rebuild.
+	SckGPIO   int
+	DoutAGPIO int
+	DoutBGPIO int
+	DoutCGPIO int
+
+	WeightStatePath string
+
+	// Servo-derived load estimate constants; CAD-derived defaults, correctable
+	// at bring-up without a rebuild.
+	StallTorqueKgcm  float64
+	PinionRadiusMm   float64
+	LoadEstStatePath string
 }
 
 func Load(path string) (*Config, error) {
@@ -61,6 +75,14 @@ func Load(path string) (*Config, error) {
 		AugerOvercurrentRaw: 500,
 		ReadGapHalt:         250 * time.Millisecond,
 		StaleInput:          150 * time.Millisecond,
+		SckGPIO:             5,
+		DoutAGPIO:           6,
+		DoutBGPIO:           13,
+		DoutCGPIO:           26,
+		WeightStatePath:     "/var/lib/waypoint-module-drill/weight.toml",
+		StallTorqueKgcm:     30,
+		PinionRadiusMm:      15.9,
+		LoadEstStatePath:    "/var/lib/waypoint-module-drill/loadest.toml",
 	}
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -83,6 +105,14 @@ func Load(path string) (*Config, error) {
 		AugerOvercurrentRaw *uint32  `toml:"auger_overcurrent_raw"`
 		ReadGapHaltMs       *int64   `toml:"read_gap_halt_ms"`
 		StaleInputMs        *int64   `toml:"stale_input_ms"`
+		SckGPIO             *int     `toml:"sck_gpio"`
+		DoutAGPIO           *int     `toml:"dout_a_gpio"`
+		DoutBGPIO           *int     `toml:"dout_b_gpio"`
+		DoutCGPIO           *int     `toml:"dout_c_gpio"`
+		WeightStatePath     string   `toml:"weight_state_path"`
+		StallTorqueKgcm     *float64 `toml:"stall_torque_kgcm"`
+		PinionRadiusMm      *float64 `toml:"pinion_radius_mm"`
+		LoadEstStatePath    string   `toml:"loadest_state_path"`
 	}
 	if _, err := toml.Decode(string(data), &raw); err != nil {
 		return nil, err
@@ -135,6 +165,30 @@ func Load(path string) (*Config, error) {
 	}
 	if raw.StaleInputMs != nil {
 		cfg.StaleInput = time.Duration(*raw.StaleInputMs) * time.Millisecond
+	}
+	if raw.SckGPIO != nil {
+		cfg.SckGPIO = *raw.SckGPIO
+	}
+	if raw.DoutAGPIO != nil {
+		cfg.DoutAGPIO = *raw.DoutAGPIO
+	}
+	if raw.DoutBGPIO != nil {
+		cfg.DoutBGPIO = *raw.DoutBGPIO
+	}
+	if raw.DoutCGPIO != nil {
+		cfg.DoutCGPIO = *raw.DoutCGPIO
+	}
+	if raw.WeightStatePath != "" {
+		cfg.WeightStatePath = raw.WeightStatePath
+	}
+	if raw.StallTorqueKgcm != nil {
+		cfg.StallTorqueKgcm = *raw.StallTorqueKgcm
+	}
+	if raw.PinionRadiusMm != nil {
+		cfg.PinionRadiusMm = *raw.PinionRadiusMm
+	}
+	if raw.LoadEstStatePath != "" {
+		cfg.LoadEstStatePath = raw.LoadEstStatePath
 	}
 	clampSpeeds(cfg)
 	return cfg, nil
