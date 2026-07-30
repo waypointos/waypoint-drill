@@ -286,6 +286,22 @@ export class DrillCommand extends Message<DrillCommand> {
      */
     value: number;
     case: "calibrateMassG";
+  } | {
+    /**
+     * average free-air descent load; refused unless the lift is driving down
+     *
+     * @generated from field: bool capture_lift_baseline = 11;
+     */
+    value: boolean;
+    case: "captureLiftBaseline";
+  } | {
+    /**
+     * average free-spin load; refused unless the auger is spinning
+     *
+     * @generated from field: bool capture_auger_baseline = 12;
+     */
+    value: boolean;
+    case: "captureAugerBaseline";
   } | { case: undefined; value?: undefined } = { case: undefined };
 
   constructor(data?: PartialMessage<DrillCommand>) {
@@ -304,6 +320,8 @@ export class DrillCommand extends Message<DrillCommand> {
     { no: 8, name: "set_bottom", kind: "scalar", T: 8 /* ScalarType.BOOL */, oneof: "action" },
     { no: 9, name: "tare", kind: "scalar", T: 8 /* ScalarType.BOOL */, oneof: "action" },
     { no: 10, name: "calibrate_mass_g", kind: "scalar", T: 1 /* ScalarType.DOUBLE */, oneof: "action" },
+    { no: 11, name: "capture_lift_baseline", kind: "scalar", T: 8 /* ScalarType.BOOL */, oneof: "action" },
+    { no: 12, name: "capture_auger_baseline", kind: "scalar", T: 8 /* ScalarType.BOOL */, oneof: "action" },
   ]);
 
   static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): DrillCommand {
@@ -586,7 +604,7 @@ export class CalibrationEvent extends Message<CalibrationEvent> {
   t?: Timestamp;
 
   /**
-   * "top_set" | "bottom_set" | "tared" | "calibrated" | "refused"
+   * "top_set" | "bottom_set" | "tared" | "calibrated" | "lift_baseline_set" | "auger_baseline_set" | "refused"
    *
    * @generated from field: string phase = 2;
    */

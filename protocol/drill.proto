@@ -54,14 +54,16 @@ message DrillCommand {
   reserved "home", "calibrate";
 
   oneof action {
-    JogLift    jog_lift         = 1;   // hold-to-move; velocity_norm 0 stops the lift
-    GotoHeight goto_height      = 2;   // requires calibrated
-    RunAuger   run_auger        = 3;   // hold-to-move; throttle 0 stops the auger
-    bool       stop             = 4;   // halt latch: zero-write both, torque off, refuse motion until fresh input
-    bool       set_top          = 7;   // anchor the current position as top of travel, height 0
-    bool       set_bottom       = 8;   // record the current position as bottom; travel = ticks below the top anchor
-    bool       tare             = 9;   // capture current counts as the weight zero; refused while any cell is not ok
-    double     calibrate_mass_g = 10;  // known mass on the plate, operator-entered grams; requires a prior tare
+    JogLift    jog_lift               = 1;   // hold-to-move; velocity_norm 0 stops the lift
+    GotoHeight goto_height            = 2;   // requires calibrated
+    RunAuger   run_auger              = 3;   // hold-to-move; throttle 0 stops the auger
+    bool       stop                   = 4;   // halt latch: zero-write both, torque off, refuse motion until fresh input
+    bool       set_top                = 7;   // anchor the current position as top of travel, height 0
+    bool       set_bottom             = 8;   // record the current position as bottom; travel = ticks below the top anchor
+    bool       tare                   = 9;   // capture current counts as the weight zero; refused while any cell is not ok
+    double     calibrate_mass_g       = 10;  // known mass on the plate, operator-entered grams; requires a prior tare
+    bool       capture_lift_baseline  = 11;  // average free-air descent load; refused unless the lift is driving down
+    bool       capture_auger_baseline = 12;  // average free-spin load; refused unless the auger is spinning
   }
 }
 message JogLift    { double velocity_norm = 1; }  // -1..1, + is up
@@ -91,7 +93,7 @@ message DrillStats {
 // ---- backend -> tab: outcome of one set_top / set_bottom mark ----
 message CalibrationEvent {
   google.protobuf.Timestamp t = 1;
-  string phase = 2;  // "top_set" | "bottom_set" | "tared" | "calibrated" | "refused"
+  string phase = 2;  // "top_set" | "bottom_set" | "tared" | "calibrated" | "lift_baseline_set" | "auger_baseline_set" | "refused"
   optional int64 travel_ticks = 3;  // present on "bottom_set"
   string detail = 4;                // refusal reason, "" otherwise
 }
