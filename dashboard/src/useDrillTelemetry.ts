@@ -68,11 +68,22 @@ export function isWeightCal(cal: CalibrationEvent | null): cal is CalibrationEve
   return cal.phase === 'refused' && WEIGHT_REFUSAL.test(cal.detail);
 }
 
+const LOADEST_REFUSAL = /^(lift baseline|auger baseline):/;
+
 /** True for the lift side of the shared calibration leaf. */
 export function isLiftCal(cal: CalibrationEvent | null): cal is CalibrationEvent {
   if (cal === null) return false;
   if (cal.phase === 'top_set' || cal.phase === 'bottom_set') return true;
-  return cal.phase === 'refused' && !WEIGHT_REFUSAL.test(cal.detail);
+  return cal.phase === 'refused'
+    && !WEIGHT_REFUSAL.test(cal.detail)
+    && !LOADEST_REFUSAL.test(cal.detail);
+}
+
+/** True for the load estimate side of the shared calibration leaf. */
+export function isLoadEstCal(cal: CalibrationEvent | null): cal is CalibrationEvent {
+  if (cal === null) return false;
+  if (cal.phase === 'lift_baseline_set' || cal.phase === 'auger_baseline_set') return true;
+  return cal.phase === 'refused' && LOADEST_REFUSAL.test(cal.detail);
 }
 
 export function useWeight(): { readings: SensorReadings | null; lastAtMs: number | null } {
@@ -88,6 +99,38 @@ export function useWeight(): { readings: SensorReadings | null; lastAtMs: number
     });
   }, [roverId, subscribe]);
   return { readings, lastAtMs };
+}
+
+/** One sensor.state frame reduced to the named series; null carries N/A. */
+export type SensorPoint = { atMs: number; values: Record<string, number | null> };
+
+const HISTORY_CAPACITY = 1200; // ~2 minutes at the sensor component's 10 Hz
+
+/** Ring buffer of named readings for the plot lanes. */
+export function useSensorHistory(names: string[], capacity = HISTORY_CAPACITY): SensorPoint[] {
+  const { roverId, subscribe } = useBridge();
+  const [points, setPoints] = useState<SensorPoint[]>([]);
+  // The names array is rebuilt on every render, so the effect keys off its
+  // contents rather than its identity.
+  const key = names.join(',');
+  useEffect(() => {
+    setPoints([]);
+    return subscribe(sensorStateSubject(roverId), (b) => {
+      let msg: SensorReadings;
+      try { msg = SensorReadings.fromBinary(b); } catch { return; }
+      const values: Record<string, number | null> = {};
+      for (const name of key.split(',')) {
+        const r = msg.readings.find((x) => x.name === name);
+        values[name] = r?.ok && r.value != null ? r.value : null;
+      }
+      setPoints((prev) => {
+        const next = prev.length >= capacity ? prev.slice(prev.length - capacity + 1) : prev.slice();
+        next.push({ atMs: Date.now(), values });
+        return next;
+      });
+    });
+  }, [roverId, subscribe, key, capacity]);
+  return points;
 }
 
 /** Finds one named reading; null when absent so callers render N/A. */

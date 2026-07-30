@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 import {
   calibrateMassCmd,
   calibrationSubject,
+  captureAugerBaselineCmd,
+  captureLiftBaselineCmd,
   cmdSubject,
   gotoHeightCmd,
   jogLiftCmd,
@@ -72,5 +74,13 @@ describe('command builders', () => {
 
   it('encodes the known calibration mass in grams', () => {
     expect(action(calibrateMassCmd(500))).toEqual({ case: 'calibrateMassG', value: 500 });
+  });
+
+  it('builds captureLiftBaseline', () => {
+    expect(action(captureLiftBaselineCmd())).toEqual({ case: 'captureLiftBaseline', value: true });
+  });
+
+  it('builds captureAugerBaseline', () => {
+    expect(action(captureAugerBaselineCmd())).toEqual({ case: 'captureAugerBaseline', value: true });
   });
 });

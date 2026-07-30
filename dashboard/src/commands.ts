@@ -74,3 +74,13 @@ export function tareCmd(): Uint8Array {
 export function calibrateMassCmd(grams: number): Uint8Array {
   return encode({ case: 'calibrateMassG', value: grams });
 }
+
+/** Averages the recent free-air descent load as the lift estimate zero. */
+export function captureLiftBaselineCmd(): Uint8Array {
+  return encode({ case: 'captureLiftBaseline', value: true });
+}
+
+/** Averages the recent free-spin load as the auger estimate zero. */
+export function captureAugerBaselineCmd(): Uint8Array {
+  return encode({ case: 'captureAugerBaseline', value: true });
+}

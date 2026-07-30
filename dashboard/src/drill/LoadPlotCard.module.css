@@ -1,0 +1,114 @@
+/* Label + current value over each plot lane, same mono/tabular readouts as
+   WEIGHT so the estimate reads as part of the same instrument. */
+.head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-sm);
+}
+
+.head + .head { margin-top: var(--space-md); }
+
+.lbl {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-fg-3);
+}
+
+.val {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-sm);
+  min-width: 0;
+}
+
+.num {
+  font-family: var(--font-mono);
+  font-size: 14px;
+  color: var(--color-fg);
+  font-variant-numeric: tabular-nums;
+}
+
+.na { font-family: var(--font-mono); font-size: 14px; color: var(--color-fg-4); }
+
+.reason {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  line-height: 1.4;
+  letter-spacing: 0.04em;
+  color: var(--color-fg-4);
+}
+
+.lane {
+  position: relative;
+  height: 72px;
+  margin-top: var(--space-sm);
+  border: 1px solid var(--color-border-soft);
+}
+
+.canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.legend {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+  margin: var(--space-xs) 0 0;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  color: var(--color-fg-4);
+}
+
+.keyEst,
+.keyCells {
+  width: 10px;
+  height: 2px;
+}
+
+.keyEst { background: var(--color-accent); }
+
+.keyCells {
+  background: var(--color-fg-4);
+  margin-left: var(--space-md);
+}
+
+.controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-sm) var(--space-md);
+  margin-top: var(--space-md);
+}
+
+.btn {
+  padding: var(--space-sm) var(--space-md);
+  background: var(--color-surface-2);
+  color: var(--color-fg-2);
+  border: 1px solid var(--color-border);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+  transition: background var(--motion), color var(--motion), border-color var(--motion);
+}
+
+.btn:hover:not(:disabled) { background: var(--color-raise); color: var(--color-fg); }
+
+.calNote {
+  margin: var(--space-md) 0 0;
+  padding-top: var(--space-sm);
+  border-top: 1px solid var(--color-border-soft);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  color: var(--color-fg-3);
+}
