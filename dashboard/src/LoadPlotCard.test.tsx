@@ -79,15 +79,11 @@ describe('LoadPlotCard', () => {
     expect(screen.getByTestId('loadest-auger-val')).toHaveTextContent('auger idle');
   });
 
-  it('reports a rising lift as unobservable', () => {
-    const { send } = setup(driving(-400));
+  it.each([400, -400])('keeps both causes in the hint for a lift moving at %i', (speedRaw) => {
+    // The panel cannot see lift_up_sign, so the hint must hold under either.
+    const { send } = setup(driving(speedRaw));
     send(readings([['lift_force_est_g', null, 'g']]));
-    expect(screen.getByTestId('loadest-lift-val')).toHaveTextContent('moving up');
-  });
-
-  it('blames the missing baseline on a descent that reads nothing', () => {
-    const { send } = setup(driving(400));
-    send(readings([['lift_force_est_g', null, 'g']]));
+    expect(screen.getByTestId('loadest-lift-val')).toHaveTextContent('rising');
     expect(screen.getByTestId('loadest-lift-val')).toHaveTextContent('no baseline');
   });
 

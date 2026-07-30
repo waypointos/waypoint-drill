@@ -143,11 +143,10 @@ function liftReason(state: DrillState | null): string {
   if (!state) return AWAITING;
   const lift = state.lift;
   if (!lift?.ok || lift.loadRaw == null || lift.speedRaw == null) return NOT_READING;
-  const speed = lift.speedRaw;
-  if (Math.abs(speed) < IDLE_SPEED_RAW) return 'lift idle';
-  // Down is -lift_up_sign; the reference assembly's up sign is -1, so down is +.
-  if (speed < 0) return 'moving up';
-  return 'no baseline · capture during a free-air descent';
+  if (Math.abs(lift.speedRaw) < IDLE_SPEED_RAW) return 'lift idle';
+  // Which raw sign means down is the daemon's lift_up_sign, which the panel
+  // never sees, so a moving lift keeps both remaining causes in the hint.
+  return 'rising, or no baseline · capture during a free-air descent';
 }
 
 function augerReason(state: DrillState | null): string {
