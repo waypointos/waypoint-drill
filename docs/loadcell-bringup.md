@@ -81,3 +81,35 @@ Offsets and scale persist in `weight_state_path`
 (`/var/lib/waypoint-module-drill/weight.toml` by default), so a restart
 keeps the calibration. Re-tare after anything mechanical changes on the
 plate.
+
+## Servo load estimate (fallback rail)
+
+The LOAD card estimates drill forces from the servo load registers. It works
+with no load cell wiring at all and stays a separate series forever; wire the
+cells whenever ready and both rails show side by side.
+
+1. Verify the constants. Measure the lift pinion pitch radius with calipers
+   (default 15.9 mm, from the CAD Drive Gear) and set `pinion_radius_mm` in
+   the module config if it differs. `stall_torque_kgcm` stays 30 for the
+   12V STS3215.
+2. Capture the lift baseline: jog the lift DOWN through free air (nothing
+   under the bit) and press "Lift baseline" while it is still moving. The
+   note shows `lift_baseline_set` with the captured N-mm.
+3. Capture the auger baseline: run the auger in free air and press "Auger
+   baseline" while it spins. Until then the auger lane plots gross torque
+   rather than net.
+4. Sanity check: press a hand up against the drill foot during a slow
+   descent. The grams lane should rise smoothly and return to zero when
+   released; the register is noisy, so expect roughly +-10% of reading.
+5. Baselines persist in `loadest_state_path`
+   (`/var/lib/waypoint-module-drill/loadest.toml` by default). Recapture
+   after any gearing or servo swap.
+
+A capture is refused if the servo was not actually driving through the
+second before the press, and the reason lands on the card as
+`refused · lift baseline: jog the lift down in free air first` (or the
+auger equivalent).
+
+The estimate is N/A whenever it would be dishonest: lift idle or rising
+(a wheel-mode servo exerts no holding torque), no baseline captured, servo
+not reading, or the feed stale. The reason renders beside the N/A.
