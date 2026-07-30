@@ -40,6 +40,9 @@ func TestLoad_MissingFileReturnsDefaults(t *testing.T) {
 		DoutBGPIO:           13,
 		DoutCGPIO:           26,
 		WeightStatePath:     "/var/lib/waypoint-module-drill/weight.toml",
+		StallTorqueKgcm:     30,
+		PinionRadiusMm:      15.9,
+		LoadEstStatePath:    "/var/lib/waypoint-module-drill/loadest.toml",
 	}, cfg)
 	require.Nil(t, cfg.MmPerTick)
 }
@@ -175,6 +178,26 @@ weight_state_path = "/tmp/w.toml"
 	require.Equal(t, 22, cfg.DoutBGPIO)
 	require.Equal(t, 23, cfg.DoutCGPIO)
 	require.Equal(t, "/tmp/w.toml", cfg.WeightStatePath)
+}
+
+func TestLoad_LoadEstimateDefaults(t *testing.T) {
+	cfg, err := Load(filepath.Join(t.TempDir(), "absent.toml"))
+	require.NoError(t, err)
+	require.Equal(t, 30.0, cfg.StallTorqueKgcm)
+	require.Equal(t, 15.9, cfg.PinionRadiusMm)
+	require.Equal(t, "/var/lib/waypoint-module-drill/loadest.toml", cfg.LoadEstStatePath)
+}
+
+func TestLoad_LoadEstimateOverrides(t *testing.T) {
+	cfg, err := Load(writeConfig(t, `
+stall_torque_kgcm = 19.5
+pinion_radius_mm = 14.2
+loadest_state_path = "/tmp/loadest.toml"
+`))
+	require.NoError(t, err)
+	require.Equal(t, 19.5, cfg.StallTorqueKgcm)
+	require.Equal(t, 14.2, cfg.PinionRadiusMm)
+	require.Equal(t, "/tmp/loadest.toml", cfg.LoadEstStatePath)
 }
 
 func TestSwitchSign_Matrix(t *testing.T) {

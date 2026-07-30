@@ -73,3 +73,15 @@ key     = "dout_c_gpio"
 label   = "HX711 DOUT C GPIO"
 type    = "number"
 default = "26"
+
+[[config.fields]]
+key     = "stall_torque_kgcm"
+label   = "Servo stall torque (kg-cm)"
+type    = "number"
+default = "30"
+
+[[config.fields]]
+key     = "pinion_radius_mm"
+label   = "Lift pinion pitch radius (mm)"
+type    = "number"
+default = "15.9"
