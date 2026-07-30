@@ -189,7 +189,7 @@ describe('isLoadEstCal', () => {
     const set = new CalibrationEvent({ phase: 'lift_baseline_set', detail: '12.0 nmm' });
     const refused = new CalibrationEvent({
       phase: 'refused',
-      detail: 'auger baseline: spin the auger in free air first',
+      detail: 'auger baseline: spin the auger in the drilling direction in free air first',
     });
     expect(isLoadEstCal(set)).toBe(true);
     expect(isLoadEstCal(refused)).toBe(true);

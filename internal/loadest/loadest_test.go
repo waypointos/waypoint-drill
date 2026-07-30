@@ -145,6 +145,51 @@ func TestAugerGrossWhenSpinningNetWhenBaselined(t *testing.T) {
 	require.InDelta(t, 0.0, e.Readings()[1].GetValue(), 10.0)
 }
 
+func TestAugerBaselineRequiresDrillDirection(t *testing.T) {
+	e, ck, evs, _ := newTest(t)
+	// Free spin in the carousel switch direction (opposite AugerDrillSign): the
+	// load reads the other way, so averaging it would store a flipped zero.
+	observeAugerN(e, ck, 40, 300, 2000)
+	require.Error(t, e.CaptureAugerBaseline())
+	require.Equal(t, "refused", (*evs)[len(*evs)-1].phase)
+
+	// Drilling direction: captured.
+	observeAugerN(e, ck, 40, -300, -2000)
+	require.NoError(t, e.CaptureAugerBaseline())
+	require.Equal(t, "auger_baseline_set", (*evs)[len(*evs)-1].phase)
+
+	// A later drilling read is net of the baseline, not double it.
+	observeAugerN(e, ck, 200, -300, -2000)
+	require.InDelta(t, 0.0, e.Readings()[1].GetValue(), 10.0)
+}
+
+func TestBaselineCaptureRefusesStaleWindow(t *testing.T) {
+	e, ck, evs, _ := newTest(t)
+	observeLiftN(e, ck, 40, 100, 400)
+	ck.at = ck.at.Add(2 * time.Second) // read loop stalled after the descent
+	require.Error(t, e.CaptureLiftBaseline())
+	require.Equal(t, "refused", (*evs)[len(*evs)-1].phase)
+	require.False(t, e.Readings()[0].Ok)
+}
+
+func TestLiftForceNAWhenPinionRadiusUnset(t *testing.T) {
+	ck := &clock{at: time.Unix(1000, 0)}
+	e := New(filepath.Join(t.TempDir(), "loadest.toml"), func(string, string) {}, Config{
+		StallTorqueNmm: 30 * 98.0665,
+		PinionRadiusMm: 0, // operator cleared the number field
+		LiftUpSign:     -1,
+		AugerDrillSign: -1,
+		Now:            ck.now,
+	})
+	observeLiftN(e, ck, 40, 100, 400)
+	require.NoError(t, e.CaptureLiftBaseline())
+	observeLiftN(e, ck, 200, 200, 400)
+
+	r := e.Readings()[0]
+	require.False(t, r.Ok)
+	require.Nil(t, r.Value)
+}
+
 func TestAugerNAWhenIdle(t *testing.T) {
 	e, ck, _, _ := newTest(t)
 	observeAugerN(e, ck, 200, -300, -2000)

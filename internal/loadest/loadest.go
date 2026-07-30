@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"math"
 	"sync"
 	"time"
 
@@ -61,7 +62,10 @@ type sample struct {
 }
 
 type Estimator struct {
-	mu        sync.Mutex
+	mu sync.Mutex
+	// saveMu serializes a capture's snapshot-then-write pair so a second
+	// capture cannot persist a snapshot taken before this one's baseline.
+	saveMu    sync.Mutex
 	statePath string
 	events    func(phase, detail string)
 	cfg       Config
@@ -83,6 +87,10 @@ func New(statePath string, events func(phase, detail string), cfg Config) *Estim
 		e.lift.baseline, e.lift.baselined = cal.LiftBaselineNmm, cal.LiftBaselineSet
 		e.auger.baseline, e.auger.baselined = cal.AugerBaselineNmm, cal.AugerBaselineSet
 	}
+	if cfg.PinionRadiusMm <= 0 {
+		slog.Warn("lift force estimate stays N/A: pinion_radius_mm must be positive",
+			"pinion_radius_mm", cfg.PinionRadiusMm)
+	}
 	return e
 }
 
@@ -96,16 +104,19 @@ func (e *Estimator) torqueNmm(loadRaw int32) float64 {
 func (e *Estimator) ObserveLift(loadRaw, speedRaw int32, ok bool) {
 	downSign := int32(-e.cfg.LiftUpSign)
 	moving := ok && speedRaw*downSign >= minSpeedRaw
-	e.observe(&e.lift, e.torqueNmm(loadRaw), moving)
+	e.observe(&e.lift, e.torqueNmm(loadRaw), moving, moving)
 }
 
-// ObserveAuger folds one auger read in; any spin direction counts as active.
+// ObserveAuger folds one auger read in. Either spin direction counts as active,
+// but only the drilling direction may seed a baseline: the carousel switch runs
+// the same servo the other way, so averaging that stores a sign-flipped zero.
 func (e *Estimator) ObserveAuger(loadRaw, speedRaw int32, ok bool) {
 	spinning := ok && (speedRaw >= minSpeedRaw || speedRaw <= -minSpeedRaw)
-	e.observe(&e.auger, e.torqueNmm(loadRaw), spinning)
+	drilling := ok && speedRaw*int32(e.cfg.AugerDrillSign) >= minSpeedRaw
+	e.observe(&e.auger, e.torqueNmm(loadRaw), spinning, drilling)
 }
 
-func (e *Estimator) observe(ch *channel, torque float64, active bool) {
+func (e *Estimator) observe(ch *channel, torque float64, active, capturable bool) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	now := e.cfg.Now()
@@ -130,6 +141,10 @@ func (e *Estimator) observe(ch *channel, torque float64, active bool) {
 	ch.valid = true
 	ch.emaAt = now
 
+	if !capturable {
+		ch.window = ch.window[:0]
+		return
+	}
 	ch.window = append(ch.window, sample{at: now, torqueNmm: torque})
 	cutoff := now.Add(-baselineWindow)
 	for len(ch.window) > 0 && ch.window[0].at.Before(cutoff) {
@@ -142,14 +157,18 @@ func (e *Estimator) CaptureLiftBaseline() error {
 	return e.capture(&e.lift, "lift_baseline_set", "lift baseline", "jog the lift down in free air first")
 }
 
-// CaptureAugerBaseline averages the recent free-spin window.
+// CaptureAugerBaseline averages the recent drilling-direction free-spin window.
 func (e *Estimator) CaptureAugerBaseline() error {
-	return e.capture(&e.auger, "auger_baseline_set", "auger baseline", "spin the auger in free air first")
+	return e.capture(&e.auger, "auger_baseline_set", "auger baseline",
+		"spin the auger in the drilling direction in free air first")
 }
 
 func (e *Estimator) capture(ch *channel, phase, what, why string) error {
+	e.saveMu.Lock()
+	defer e.saveMu.Unlock()
+
 	e.mu.Lock()
-	if !ch.valid || len(ch.window) < baselineMinSamples {
+	if !ch.valid || !fresh(ch.lastAt, e.cfg.Now()) || len(ch.window) < baselineMinSamples {
 		e.mu.Unlock()
 		e.events("refused", what+": "+why)
 		return errors.New(why)
@@ -184,11 +203,15 @@ func (e *Estimator) Readings() []*waypointv1.SensorReading {
 	now := e.cfg.Now()
 
 	lr := &waypointv1.SensorReading{Name: NameLiftForceEstG, Unit: "g"}
-	if e.lift.valid && e.lift.baselined && fresh(e.lift.lastAt, now) {
+	// A non-positive radius is a misconfiguration, so the force stays N/A
+	// rather than publishing the Inf or NaN the division would yield.
+	if e.lift.valid && e.lift.baselined && fresh(e.lift.lastAt, now) && e.cfg.PinionRadiusMm > 0 {
 		netNmm := e.lift.ema - e.lift.baseline
 		v := netNmm / e.cfg.PinionRadiusMm * gramsPerNewton * float64(-e.cfg.LiftUpSign)
-		lr.Ok = true
-		lr.Value = &v
+		if finite(v) {
+			lr.Ok = true
+			lr.Value = &v
+		}
 	}
 
 	ar := &waypointv1.SensorReading{Name: NameAugerTorqueEstNmm, Unit: "nmm"}
@@ -198,8 +221,10 @@ func (e *Estimator) Readings() []*waypointv1.SensorReading {
 			net -= e.auger.baseline
 		}
 		v := net * float64(e.cfg.AugerDrillSign)
-		ar.Ok = true
-		ar.Value = &v
+		if finite(v) {
+			ar.Ok = true
+			ar.Value = &v
+		}
 	}
 
 	return []*waypointv1.SensorReading{lr, ar}
@@ -207,4 +232,8 @@ func (e *Estimator) Readings() []*waypointv1.SensorReading {
 
 func fresh(lastAt, now time.Time) bool {
 	return !lastAt.IsZero() && now.Sub(lastAt) <= staleAfter
+}
+
+func finite(v float64) bool {
+	return !math.IsInf(v, 0) && !math.IsNaN(v)
 }
