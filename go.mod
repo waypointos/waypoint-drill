@@ -1,16 +1,16 @@
 module github.com/waypointos/waypoint-drill
 
-go 1.25.0
+go 1.26.0
 
 require (
 	github.com/BurntSushi/toml v1.6.0
-	github.com/nats-io/nats.go v1.52.0
-	github.com/stretchr/testify v1.11.1
+	github.com/nats-io/nats.go v1.53.1
+	github.com/stretchr/testify v1.12.1
 	github.com/warthog618/go-gpiocdev v0.9.1
 	github.com/waypointos/waypoint/protocol/gen/go v0.0.0
 	github.com/waypointos/waypoint/sdk v0.0.0
-	golang.org/x/sys v0.47.0
-	google.golang.org/protobuf v1.36.11
+	golang.org/x/sys v0.48.0
+	google.golang.org/protobuf v1.36.12
 )
 
 require (
